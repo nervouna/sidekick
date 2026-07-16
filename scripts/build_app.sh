@@ -8,6 +8,7 @@ APP_PATH="$ROOT/build/Sidekick.app"
 CONTENTS="$APP_PATH/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
+APP_ICON_RESOURCES="$ROOT/Resources/AppIcon"
 
 mkdir -p "$CACHE_ROOT/clang" "$CACHE_ROOT/swift"
 export CLANG_MODULE_CACHE_PATH="$CACHE_ROOT/clang"
@@ -19,6 +20,8 @@ BIN_DIR="$(swift build --package-path "$ROOT" --configuration "$CONFIGURATION" -
 rm -rf "$APP_PATH"
 mkdir -p "$MACOS" "$RESOURCES"
 cp "$BIN_DIR/Sidekick" "$MACOS/Sidekick"
+cp "$APP_ICON_RESOURCES/Assets.car" "$RESOURCES/Assets.car"
+cp "$APP_ICON_RESOURCES/Sidekick.icns" "$RESOURCES/Sidekick.icns"
 
 cat > "$CONTENTS/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -33,6 +36,10 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
   <string>Sidekick</string>
   <key>CFBundleIdentifier</key>
   <string>io.damao.sidekick</string>
+  <key>CFBundleIconFile</key>
+  <string>Sidekick</string>
+  <key>CFBundleIconName</key>
+  <string>Sidekick</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
