@@ -10,6 +10,7 @@ private enum ItemKind: Equatable {
     case search(Bool)
     case activitySummary(String, Bool)
     case streaming(String)
+    case contextNotice
 }
 
 private extension ConversationItem {
@@ -26,6 +27,8 @@ private extension ConversationItem {
             return .activitySummary(summary.label, summary.completed)
         case .streaming(_, let content):
             return .streaming(content)
+        case .contextNotice:
+            return .contextNotice
         }
     }
 }
@@ -167,6 +170,7 @@ func cancelledPartialReplyIsCommittedBelowActivities() {
         .user("Question"), .thinking(false), .assistant("Partial")
     ])
     #expect(viewModel.session.messages.last?.content == "Partial")
+    #expect(viewModel.session.messages.last?.completionState == .cancelled)
 }
 
 @Test @MainActor

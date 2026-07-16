@@ -13,15 +13,24 @@ DEEPSEEK_RESPONSE="$(mktemp -t sidekick-deepseek)"
 TAVILY_RESPONSE="$(mktemp -t sidekick-tavily)"
 trap 'rm -f "$DEEPSEEK_RESPONSE" "$TAVILY_RESPONSE"' EXIT
 
+DEEPSEEK_REQUEST='{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"Reply with OK."}],"stream":true,"stream_options":{"include_usage":true},"thinking":{"type":"enabled"},"reasoning_effort":"high","max_tokens":32,"tools":[{"type":"function","function":{"name":"web_search","description":"Search the web","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}}]}'
+if [[ "$DEEPSEEK_REQUEST" != *'"max_tokens":32'* ]] || [[ "$DEEPSEEK_REQUEST" != *'"include_usage":true'* ]]; then
+  print -u2 -- "DeepSeek smoke request is missing the context-budget options"
+  exit 1
+fi
+
 DEEPSEEK_STATUS="$(curl --silent --show-error \
   --output "$DEEPSEEK_RESPONSE" \
   --write-out '%{http_code}' \
   https://api.deepseek.com/v1/chat/completions \
   -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
   -H 'Content-Type: application/json' \
-  --data '{"model":"deepseek-v4-flash","messages":[{"role":"user","content":"Reply with OK."}],"stream":true,"thinking":{"type":"enabled"},"reasoning_effort":"high","max_tokens":32,"tools":[{"type":"function","function":{"name":"web_search","description":"Search the web","parameters":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":false}}}]}')"
+  --data "$DEEPSEEK_REQUEST")"
 
-if [[ "$DEEPSEEK_STATUS" != "200" ]] || ! grep -q 'data: \[DONE\]' "$DEEPSEEK_RESPONSE"; then
+if [[ "$DEEPSEEK_STATUS" != "200" ]] \
+  || ! grep -q 'data: \[DONE\]' "$DEEPSEEK_RESPONSE" \
+  || ! grep -Eq '"finish_reason"[[:space:]]*:[[:space:]]*"stop"' "$DEEPSEEK_RESPONSE" \
+  || ! grep -Eq '"usage"[[:space:]]*:[[:space:]]*\{' "$DEEPSEEK_RESPONSE"; then
   print -u2 -- "DeepSeek smoke test failed (HTTP $DEEPSEEK_STATUS)"
   exit 1
 fi

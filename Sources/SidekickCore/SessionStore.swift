@@ -10,7 +10,7 @@ public struct SystemDateProvider: DateProviding {
 }
 
 public enum SessionExpiry {
-    public static let timeout: TimeInterval = 60 * 60
+    public static let timeout: TimeInterval = ContextPolicy.sessionExpiry
 
     public static func isExpired(_ session: ChatSession, at now: Date, timeout: TimeInterval = timeout) -> Bool {
         guard let lastMessageAt = session.lastMessageAt else { return false }
@@ -32,7 +32,13 @@ public enum PopoverLayout {
     }
 }
 
-public final class SessionStore: @unchecked Sendable {
+public protocol SessionStoring: Sendable {
+    func load(now: Date) throws -> ChatSession
+    func save(_ session: ChatSession) throws
+    func delete() throws
+}
+
+public final class SessionStore: SessionStoring, @unchecked Sendable {
     public let fileURL: URL
     private let fileManager: FileManager
     private let encoder: JSONEncoder

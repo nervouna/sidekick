@@ -41,7 +41,12 @@ private let fixedPromptContext = SystemPromptContext(
         ChatMessage(role: .tool, content: "[]", toolCallID: "call-1")
     ]
 
-    let request = DeepSeekRequestBody(messages: conversation, context: fixedPromptContext)
+    let modelRequest = ModelRequest(
+        systemPrompt: SidekickSystemPrompt.render(context: fixedPromptContext),
+        conversationMessages: conversation,
+        maxTokens: 4_096
+    )
+    let request = DeepSeekRequestBody(request: modelRequest)
 
     #expect(request.messages.count == 4)
     #expect(request.messages.filter { $0.role == "system" }.count == 1)
@@ -55,7 +60,11 @@ private let fixedPromptContext = SystemPromptContext(
 }
 
 @Test func webSearchDefinitionCarriesDecisionRulesAndStrictQuerySchema() throws {
-    let request = DeepSeekRequestBody(messages: [], context: fixedPromptContext)
+    let request = DeepSeekRequestBody(request: ModelRequest(
+        systemPrompt: SidekickSystemPrompt.render(context: fixedPromptContext),
+        conversationMessages: [],
+        maxTokens: 4_096
+    ))
     let data = try JSONEncoder().encode(request)
     let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let tools = try #require(root["tools"] as? [[String: Any]])

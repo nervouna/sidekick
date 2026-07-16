@@ -73,6 +73,8 @@ struct ChatView: View {
                             ActivitySummaryRow(summary: summary)
                         case .streaming(_, let content):
                             MessageBubble(message: ChatMessage(role: .assistant, content: content))
+                        case .contextNotice:
+                            ContextNoticeRow()
                         }
                     }
                     if let error = viewModel.errorMessage {
@@ -124,10 +126,22 @@ struct ChatView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
+                if viewModel.showsInputCharacterCount {
+                    Text("\(viewModel.inputCharacterCount) / \(ContextPolicy.userCharacterLimit)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(viewModel.isInputOverLimit ? .red : .secondary)
+                        .accessibilityLabel("已输入 \(viewModel.inputCharacterCount) 个字符，上限 \(ContextPolicy.userCharacterLimit) 个字符")
+                }
                 Button(action: viewModel.send) { Image(systemName: "arrow.up.circle.fill") }
                     .buttonStyle(.borderless)
                     .font(.title2)
-                    .disabled(viewModel.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isGenerating)
+                    .disabled(!viewModel.canSend)
+            }
+            if viewModel.isInputOverLimit {
+                Text("问题不能超过 1000 个字符，请删减后发送。")
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(10)
@@ -197,6 +211,16 @@ private struct ErrorRow: View {
     }
 }
 
+private struct ContextNoticeRow: View {
+    var body: some View {
+        Label("为保持对话轻量，已移除较早内容。", systemImage: "text.badge.minus")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 2)
+    }
+}
+
 struct MessageBubble: View {
     let message: ChatMessage
 
@@ -204,9 +228,8 @@ struct MessageBubble: View {
         HStack {
             if message.role == .user { Spacer(minLength: 42) }
             ViewThatFits(in: .horizontal) {
-                SidekickMarkdown(message.content ?? "")
-                    .fixedSize(horizontal: true, vertical: false)
-                SidekickMarkdown(message.content ?? "")
+                messageContent.fixedSize(horizontal: true, vertical: false)
+                messageContent
             }
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
@@ -217,5 +240,26 @@ struct MessageBubble: View {
 
     private var background: Color {
         message.role == .user ? Color.accentColor.opacity(0.17) : Color(nsColor: .controlBackgroundColor)
+    }
+
+    private var messageContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SidekickMarkdown(message.content ?? "")
+            if let label = completionLabel {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var completionLabel: String? {
+        switch message.completionState {
+        case .cancelled: "已取消，未用于后续上下文"
+        case .truncated: "回答已截断，未用于后续上下文"
+        case .filtered: "回答受安全策略限制，未用于后续上下文"
+        case .interrupted: "回答已中断，未用于后续上下文"
+        case .complete, .none: nil
+        }
     }
 }

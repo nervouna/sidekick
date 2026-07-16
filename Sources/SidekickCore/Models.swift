@@ -36,6 +36,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var reasoningContent: String?
     public var toolCalls: [ToolCall]?
     public var toolCallID: String?
+    public var completionState: AssistantCompletionState?
     public var createdAt: Date
 
     public init(
@@ -45,6 +46,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         reasoningContent: String? = nil,
         toolCalls: [ToolCall]? = nil,
         toolCallID: String? = nil,
+        completionState: AssistantCompletionState? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -53,7 +55,88 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
+        self.completionState = completionState
         self.createdAt = createdAt
+    }
+}
+
+public enum AssistantCompletionState: String, Codable, Equatable, Sendable {
+    case complete
+    case cancelled
+    case truncated
+    case filtered
+    case interrupted
+}
+
+public enum ModelFinishReason: String, Codable, Equatable, Sendable {
+    case stop
+    case length
+    case toolCalls = "tool_calls"
+    case contentFilter = "content_filter"
+    case insufficientSystemResource = "insufficient_system_resource"
+}
+
+public struct TokenUsage: Codable, Equatable, Sendable {
+    public var promptTokens: Int
+    public var completionTokens: Int
+    public var reasoningTokens: Int
+    public var cacheHitTokens: Int
+    public var cacheMissTokens: Int
+    public var totalTokens: Int
+
+    public init(
+        promptTokens: Int = 0,
+        completionTokens: Int = 0,
+        reasoningTokens: Int = 0,
+        cacheHitTokens: Int = 0,
+        cacheMissTokens: Int = 0,
+        totalTokens: Int = 0
+    ) {
+        self.promptTokens = promptTokens
+        self.completionTokens = completionTokens
+        self.reasoningTokens = reasoningTokens
+        self.cacheHitTokens = cacheHitTokens
+        self.cacheMissTokens = cacheMissTokens
+        self.totalTokens = totalTokens
+    }
+}
+
+public enum ToolChoice: String, Codable, Equatable, Sendable {
+    case auto
+    case none
+}
+
+public struct DeepSeekRequestOptions: Equatable, Sendable {
+    public var maxTokens: Int
+    public var toolChoice: ToolChoice
+    public var includeUsage: Bool
+
+    public init(maxTokens: Int, toolChoice: ToolChoice = .auto, includeUsage: Bool = true) {
+        self.maxTokens = maxTokens
+        self.toolChoice = toolChoice
+        self.includeUsage = includeUsage
+    }
+}
+
+public struct ModelRequest: Equatable, Sendable {
+    public var systemPrompt: String
+    public var conversationMessages: [ChatMessage]
+    public var options: DeepSeekRequestOptions
+
+    public init(
+        systemPrompt: String,
+        conversationMessages: [ChatMessage],
+        maxTokens: Int,
+        toolChoice: ToolChoice = .auto,
+        includeUsage: Bool = true
+    ) {
+        self.systemPrompt = systemPrompt
+        self.conversationMessages = conversationMessages
+        options = DeepSeekRequestOptions(
+            maxTokens: maxTokens,
+            toolChoice: toolChoice,
+            includeUsage: includeUsage
+        )
     }
 }
 
@@ -85,7 +168,8 @@ public enum ModelStreamEvent: Equatable, Sendable {
     case reasoningDelta(String)
     case contentDelta(String)
     case toolCallDelta(index: Int, id: String?, name: String?, arguments: String?)
-    case finished
+    case usage(TokenUsage)
+    case finished(ModelFinishReason)
 }
 
 public enum AgentEvent: Equatable, Sendable {
@@ -94,8 +178,10 @@ public enum AgentEvent: Equatable, Sendable {
     case contentDelta(String)
     case toolCallStarted
     case toolCallCompleted
+    case usage(TokenUsage, estimatedPromptTokens: Int)
+    case contextPrepared([ChatMessage], evictedMessageIDs: Set<UUID>)
     case finished([ChatMessage])
-    case failed(String)
+    case failed(String, [ChatMessage]?)
 }
 
 public struct TavilyResult: Codable, Equatable, Sendable {
@@ -120,6 +206,8 @@ public enum SidekickError: LocalizedError, Equatable, Sendable {
     case http(status: Int, message: String)
     case invalidToolArguments
     case toolRoundLimit
+    case contextBudgetExceeded
+    case userInputTooLong
     case cancelled
 
     public var errorDescription: String? {
@@ -129,6 +217,8 @@ public enum SidekickError: LocalizedError, Equatable, Sendable {
         case .http(let status, let message): return "请求失败（HTTP \(status)）：\(message)"
         case .invalidToolArguments: return "网页搜索参数无效"
         case .toolRoundLimit: return "网页搜索次数已达到本轮上限，请缩小问题范围后重试"
+        case .contextBudgetExceeded: return "本轮上下文已达到预算上限，请缩小问题后重试"
+        case .userInputTooLong: return "问题不能超过 1000 个字符"
         case .cancelled: return "请求已取消"
         }
     }

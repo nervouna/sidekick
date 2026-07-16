@@ -1,9 +1,15 @@
 import Foundation
 
-struct SystemPromptContext: Sendable {
-    let date: Date
-    let timeZone: TimeZone
-    let locale: Locale
+public struct SystemPromptContext: Sendable {
+    public let date: Date
+    public let timeZone: TimeZone
+    public let locale: Locale
+
+    public init(date: Date, timeZone: TimeZone, locale: Locale) {
+        self.date = date
+        self.timeZone = timeZone
+        self.locale = locale
+    }
 
     static func current() -> Self {
         Self(date: Date(), timeZone: .current, locale: .current)
@@ -17,8 +23,8 @@ struct SystemPromptContext: Sendable {
     }
 }
 
-enum SidekickSystemPrompt {
-    static func render(context: SystemPromptContext) -> String {
+public enum SidekickSystemPrompt {
+    public static func render(context: SystemPromptContext) -> String {
         """
         # Identity
 
