@@ -18,21 +18,80 @@ struct ActivityItem: Identifiable, Equatable {
     }
 }
 
+struct ActivitySummary: Identifiable, Equatable {
+    let id: UUID
+    let label: String
+    let completed: Bool
+}
+
+enum StreamingHeightDecision: Equatable {
+    case none
+    case apply(CGFloat)
+    case schedule(TimeInterval)
+}
+
+struct StreamingHeightPolicy {
+    static let minimumGrowth = CGFloat(40)
+    static let cadence: TimeInterval = 0.3
+    private static let timingTolerance: TimeInterval = 0.001
+
+    private(set) var lastUpdateAt: Date?
+    private(set) var pendingTargetHeight: CGFloat?
+
+    mutating func observe(
+        currentHeight: CGFloat,
+        targetHeight: CGFloat,
+        now: Date
+    ) -> StreamingHeightDecision {
+        guard targetHeight - currentHeight >= Self.minimumGrowth else { return .none }
+
+        guard let lastUpdateAt else {
+            self.lastUpdateAt = now
+            pendingTargetHeight = nil
+            return .apply(targetHeight)
+        }
+
+        let elapsed = now.timeIntervalSince(lastUpdateAt)
+        guard elapsed + Self.timingTolerance < Self.cadence else {
+            self.lastUpdateAt = now
+            pendingTargetHeight = nil
+            return .apply(targetHeight)
+        }
+
+        pendingTargetHeight = max(pendingTargetHeight ?? targetHeight, targetHeight)
+        return .schedule(max(0, Self.cadence - elapsed))
+    }
+
+    mutating func flush(currentHeight: CGFloat, now: Date) -> CGFloat? {
+        guard let targetHeight = pendingTargetHeight else { return nil }
+        guard now.timeIntervalSince(lastUpdateAt ?? .distantPast) + Self.timingTolerance >= Self.cadence else {
+            return nil
+        }
+        pendingTargetHeight = nil
+        guard targetHeight - currentHeight >= Self.minimumGrowth else { return nil }
+        lastUpdateAt = now
+        return targetHeight
+    }
+}
+
 enum ConversationItem: Identifiable, Equatable {
     enum ID: Hashable {
         case message(UUID)
         case activity(UUID)
+        case activitySummary(UUID)
         case activeResponse(UUID)
     }
 
     case message(id: ID, message: ChatMessage)
     case activity(ActivityItem)
+    case activitySummary(ActivitySummary)
     case streaming(id: ID, content: String)
 
     var id: ID {
         switch self {
         case .message(let id, _), .streaming(let id, _): id
         case .activity(let activity): .activity(activity.id)
+        case .activitySummary(let summary): .activitySummary(summary.id)
         }
     }
 }
@@ -57,6 +116,11 @@ final class ChatViewModel: ObservableObject {
     private var generationID = UUID()
     private(set) var activeInsertionPoint: Int?
     private var activeResponseID = UUID()
+    private var activeActivitySummaryID = UUID()
+    private var isStreamingResponse = false
+    private var latestMeasuredWindowHeight = CGFloat(PopoverLayout.minimumHeight)
+    private var streamingHeightPolicy = StreamingHeightPolicy()
+    private var streamingHeightTask: Task<Void, Never>?
 
     init(
         sessionStore: SessionStore = SessionStore(),
@@ -85,7 +149,13 @@ final class ChatViewModel: ObservableObject {
         let split = min(insertionPoint, messages.count)
         let prefix = messages[..<split].map { ConversationItem.message(id: .message($0.id), message: $0) }
         let suffix = messages[split...]
-        var items = prefix + activities.map(ConversationItem.activity)
+        let activityItems: [ConversationItem]
+        if activities.count > 2 {
+            activityItems = [.activitySummary(activitySummary)]
+        } else {
+            activityItems = activities.map(ConversationItem.activity)
+        }
+        var items = prefix + activityItems
         for (offset, message) in suffix.enumerated() {
             let id: ConversationItem.ID = offset == 0 ? .activeResponse(activeResponseID) : .message(message.id)
             items.append(.message(id: id, message: message))
@@ -94,6 +164,22 @@ final class ChatViewModel: ObservableObject {
             items.append(.streaming(id: .activeResponse(activeResponseID), content: streamingContent))
         }
         return items
+    }
+
+    private var activitySummary: ActivitySummary {
+        let completedThinking = activities.count { $0.kind == .thinking && $0.completed }
+        let completedSearch = activities.count { $0.kind == .search && $0.completed }
+        var components: [String] = []
+        if completedThinking > 0 { components.append("已思考 \(completedThinking) 次") }
+        if completedSearch > 0 { components.append("已搜索 \(completedSearch) 次") }
+        if let active = activities.last(where: { !$0.completed }) {
+            components.append(active.kind == .thinking ? "正在思考…" : "正在搜索网页…")
+        }
+        return ActivitySummary(
+            id: activeActivitySummaryID,
+            label: components.joined(separator: " · "),
+            completed: activities.allSatisfy(\.completed)
+        )
     }
 
     static func visibleMessages(in messages: [ChatMessage]) -> [ChatMessage] {
@@ -156,6 +242,7 @@ final class ChatViewModel: ObservableObject {
         generationTask = nil
         generationID = UUID()
         isGenerating = false
+        resetStreamingLayout()
         streamingContent = ""
         activities = []
         activeInsertionPoint = nil
@@ -175,18 +262,39 @@ final class ChatViewModel: ObservableObject {
             session.append(ChatMessage(role: .assistant, content: streamingContent), now: dateProvider.now())
             try? sessionStore.save(session)
         }
+        finishStreamingLayout()
         streamingContent = ""
         errorMessage = "请求已取消"
     }
 
-    func updateLayoutHeights(contentHeight: CGFloat, chromeHeight: CGFloat) {
+    func updateLayoutHeights(contentHeight: CGFloat, chromeHeight: CGFloat, now: Date? = nil) {
         let target = CGFloat(
             PopoverLayout.height(
                 forContentHeight: Double(contentHeight),
                 chromeHeight: Double(chromeHeight)
             )
         )
-        if abs(target - windowHeight) > 1 { windowHeight = target }
+        latestMeasuredWindowHeight = target
+        guard isStreamingResponse else {
+            if abs(target - windowHeight) > 1 { windowHeight = target }
+            return
+        }
+
+        let timestamp = now ?? dateProvider.now()
+        switch streamingHeightPolicy.observe(
+            currentHeight: windowHeight,
+            targetHeight: target,
+            now: timestamp
+        ) {
+        case .none:
+            break
+        case .apply(let height):
+            streamingHeightTask?.cancel()
+            streamingHeightTask = nil
+            windowHeight = height
+        case .schedule(let delay):
+            scheduleStreamingHeightUpdate(after: delay)
+        }
     }
 
     private func startGeneration() {
@@ -232,10 +340,12 @@ final class ChatViewModel: ObservableObject {
     }
 
     func beginActiveTimeline() {
+        resetStreamingLayout()
         activities = []
         streamingContent = ""
         activeInsertionPoint = Self.visibleMessages(in: session.messages).count
         activeResponseID = UUID()
+        activeActivitySummaryID = UUID()
     }
 
     func handle(_ event: AgentEvent) {
@@ -246,18 +356,25 @@ final class ChatViewModel: ObservableObject {
         case .thinkingCompleted:
             completeLastActivity(of: .thinking)
         case .contentDelta(let delta):
+            if !isStreamingResponse {
+                isStreamingResponse = true
+                streamingHeightPolicy = StreamingHeightPolicy()
+            }
             streamingContent += delta
         case .toolCallStarted:
+            finishStreamingLayout()
             activities.append(ActivityItem(id: UUID(), kind: .search, completed: false))
         case .toolCallCompleted:
             completeLastActivity(of: .search)
             streamingContent = ""
         case .finished(let messages):
+            finishStreamingLayout()
             session.messages = messages
             session.lastMessageAt = dateProvider.now()
             streamingContent = ""
             try? sessionStore.save(session)
         case .failed(let message):
+            finishStreamingLayout()
             errorMessage = message
         }
     }
@@ -265,5 +382,40 @@ final class ChatViewModel: ObservableObject {
     private func completeLastActivity(of kind: ActivityItem.Kind) {
         guard let index = activities.lastIndex(where: { $0.kind == kind && !$0.completed }) else { return }
         activities[index].completed = true
+    }
+
+    private func scheduleStreamingHeightUpdate(after delay: TimeInterval) {
+        guard streamingHeightTask == nil else { return }
+        streamingHeightTask = Task { [weak self] in
+            let nanoseconds = UInt64(max(0, delay) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled, let self else { return }
+            streamingHeightTask = nil
+            guard isStreamingResponse else { return }
+            if let height = streamingHeightPolicy.flush(
+                currentHeight: windowHeight,
+                now: dateProvider.now()
+            ) {
+                windowHeight = height
+            }
+        }
+    }
+
+    private func finishStreamingLayout() {
+        guard isStreamingResponse else { return }
+        streamingHeightTask?.cancel()
+        streamingHeightTask = nil
+        streamingHeightPolicy = StreamingHeightPolicy()
+        isStreamingResponse = false
+        if abs(latestMeasuredWindowHeight - windowHeight) > 1 {
+            windowHeight = latestMeasuredWindowHeight
+        }
+    }
+
+    private func resetStreamingLayout() {
+        streamingHeightTask?.cancel()
+        streamingHeightTask = nil
+        streamingHeightPolicy = StreamingHeightPolicy()
+        isStreamingResponse = false
     }
 }

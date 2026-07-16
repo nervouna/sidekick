@@ -69,6 +69,8 @@ struct ChatView: View {
                             MessageBubble(message: message)
                         case .activity(let activity):
                             ActivityRow(activity: activity)
+                        case .activitySummary(let summary):
+                            ActivitySummaryRow(summary: summary)
                         case .streaming(_, let content):
                             MessageBubble(message: ChatMessage(role: .assistant, content: content))
                         }
@@ -81,8 +83,11 @@ struct ChatView: View {
                 .padding(14)
                 .measuringHeight(as: .content)
             }
-            .onChange(of: viewModel.conversationItems) { _, _ in
+            .onChange(of: viewModel.conversationItems.map(\.id)) { _, _ in
                 withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: viewModel.streamingContent) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
     }
@@ -160,6 +165,19 @@ private struct ActivityRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .symbolEffect(.pulse, isActive: !activity.completed)
+    }
+}
+
+private struct ActivitySummaryRow: View {
+    let summary: ActivitySummary
+
+    var body: some View {
+        Label(summary.label, systemImage: "sparkles")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityLabel(summary.label)
+            .symbolEffect(.pulse, isActive: !summary.completed)
     }
 }
 
