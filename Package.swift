@@ -24,6 +24,10 @@ let package = Package(
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")
             ]
         ),
+        .executableTarget(
+            name: "SidekickPromptEval",
+            dependencies: ["SidekickCore"]
+        ),
         .testTarget(
             name: "SidekickCoreTests",
             dependencies: ["SidekickCore"]

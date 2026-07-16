@@ -40,6 +40,12 @@ UI 自动验收时可让调试版启动后直接展开弹窗：`Sidekick --open-
 ./scripts/smoke_api.sh
 ```
 
+修改系统提示词后，可显式运行真实模型行为评测。该命令复用 `.env` 中的 `DEEPSEEK_API_KEY`，会消耗少量 DeepSeek tokens，但使用固定搜索结果，不消耗 Tavily Search credit，也不属于默认 `verify.sh`：
+
+```sh
+./scripts/eval_prompt.sh
+```
+
 生成的本地调试 App 位于 `build/Sidekick.app`。它采用本机临时签名，仅用于开发与个人调试，尚未包含 Developer ID 签名、公证或发布流程。
 
 ## 使用
