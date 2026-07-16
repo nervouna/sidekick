@@ -19,8 +19,16 @@ public enum SessionExpiry {
 }
 
 public enum PopoverLayout {
-    public static func height(forContentHeight contentHeight: Double) -> Double {
-        min(800, max(400, contentHeight + 190))
+    public static let width: Double = 400
+    public static let minimumHeight: Double = 400
+    public static let maximumHeight: Double = 800
+    public static let dividerHeight: Double = 1
+
+    public static func height(forContentHeight contentHeight: Double, chromeHeight: Double) -> Double {
+        let content = contentHeight.isFinite ? max(0, contentHeight) : 0
+        let chrome = chromeHeight.isFinite ? max(0, chromeHeight) : 0
+        let desiredHeight = content + chrome + (dividerHeight * 2)
+        return min(maximumHeight, max(minimumHeight, desiredHeight))
     }
 }
 

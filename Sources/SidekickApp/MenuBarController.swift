@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SidekickCore
 
 @MainActor
 final class MenuBarController: NSObject {
@@ -29,12 +30,12 @@ final class MenuBarController: NSObject {
 
         popover.behavior = .transient
         popover.animates = true
-        popover.contentSize = NSSize(width: 400, height: 400)
+        popover.contentSize = NSSize(width: PopoverLayout.width, height: PopoverLayout.minimumHeight)
         popover.contentViewController = NSHostingController(
             rootView: ChatView(
                 viewModel: viewModel,
                 onHeightChange: { [weak self] height in
-                    self?.popover.contentSize = NSSize(width: 400, height: height)
+                    self?.popover.contentSize = NSSize(width: PopoverLayout.width, height: height)
                 },
                 onOpenSettings: onOpenSettings
             )
@@ -59,7 +60,7 @@ final class MenuBarController: NSObject {
         }
         viewModel.refreshForPresentation()
         guard let button = statusItem.button else { return }
-        popover.contentSize = NSSize(width: 400, height: viewModel.windowHeight)
+        popover.contentSize = NSSize(width: PopoverLayout.width, height: viewModel.windowHeight)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -67,7 +68,7 @@ final class MenuBarController: NSObject {
     func showPopover() {
         guard !popover.isShown, let button = statusItem.button else { return }
         viewModel.refreshForPresentation()
-        popover.contentSize = NSSize(width: 400, height: viewModel.windowHeight)
+        popover.contentSize = NSSize(width: PopoverLayout.width, height: viewModel.windowHeight)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
     }

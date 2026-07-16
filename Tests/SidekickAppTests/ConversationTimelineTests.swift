@@ -165,3 +165,20 @@ func startingAnotherTurnAndCreatingANewConversationResetTransientState() {
     #expect(viewModel.conversationItems.isEmpty)
     #expect(viewModel.activeInsertionPoint == nil)
 }
+
+@Test @MainActor
+func popoverHeightTracksMeasuredContentAndResetsForANewConversation() {
+    let viewModel = makeViewModel(messages: [])
+
+    viewModel.updateLayoutHeights(contentHeight: 50, chromeHeight: 150)
+    #expect(viewModel.windowHeight == 400)
+
+    viewModel.updateLayoutHeights(contentHeight: 348, chromeHeight: 150)
+    #expect(viewModel.windowHeight == 500)
+
+    viewModel.updateLayoutHeights(contentHeight: 1_000, chromeHeight: 150)
+    #expect(viewModel.windowHeight == 800)
+
+    viewModel.newConversation()
+    #expect(viewModel.windowHeight == 400)
+}

@@ -8,14 +8,24 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            header.measuringHeight(as: .header)
             Divider()
             conversation
             Divider()
-            composer
+            composer.measuringHeight(as: .composer)
         }
-        .frame(width: 400, height: viewModel.windowHeight)
+        .frame(width: CGFloat(PopoverLayout.width), height: viewModel.windowHeight)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onPreferenceChange(LayoutHeightKey.self) { heights in
+            guard let contentHeight = heights[.content],
+                  let headerHeight = heights[.header],
+                  let composerHeight = heights[.composer]
+            else { return }
+            viewModel.updateLayoutHeights(
+                contentHeight: contentHeight,
+                chromeHeight: headerHeight + composerHeight
+            )
+        }
         .onChange(of: viewModel.windowHeight) { _, height in onHeightChange(height) }
     }
 
@@ -49,7 +59,7 @@ struct ChatView: View {
     private var conversation: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
                     if viewModel.conversationItems.isEmpty {
                         emptyState
                     }
@@ -69,13 +79,8 @@ struct ChatView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(14)
-                .background(
-                    GeometryReader { proxy in
-                        Color.clear.preference(key: ContentHeightKey.self, value: proxy.size.height)
-                    }
-                )
+                .measuringHeight(as: .content)
             }
-            .onPreferenceChange(ContentHeightKey.self, perform: viewModel.updateContentHeight)
             .onChange(of: viewModel.conversationItems) { _, _ in
                 withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
@@ -124,9 +129,28 @@ struct ChatView: View {
     }
 }
 
-private struct ContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+private enum LayoutComponent: Hashable {
+    case header
+    case content
+    case composer
+}
+
+private struct LayoutHeightKey: PreferenceKey {
+    static let defaultValue: [LayoutComponent: CGFloat] = [:]
+
+    static func reduce(value: inout [LayoutComponent: CGFloat], nextValue: () -> [LayoutComponent: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+private extension View {
+    func measuringHeight(as component: LayoutComponent) -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: LayoutHeightKey.self, value: [component: proxy.size.height])
+            }
+        }
+    }
 }
 
 private struct ActivityRow: View {

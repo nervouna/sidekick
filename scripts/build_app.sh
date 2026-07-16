@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="${0:A:h:h}"
 CONFIGURATION="${SIDEKICK_BUILD_CONFIGURATION:-debug}"
+CODE_SIGN_IDENTITY="${SIDEKICK_CODE_SIGN_IDENTITY:--}"
 CACHE_ROOT="$ROOT/.build/local-cache"
 APP_PATH="$ROOT/build/Sidekick.app"
 CONTENTS="$APP_PATH/Contents"
@@ -60,5 +61,9 @@ cat > "$CONTENTS/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force --sign - --timestamp=none "$APP_PATH" >/dev/null
+if [[ "$CODE_SIGN_IDENTITY" == "-" ]]; then
+  codesign --force --sign - --timestamp=none "$APP_PATH" >/dev/null
+else
+  codesign --force --sign "$CODE_SIGN_IDENTITY" --options runtime --timestamp "$APP_PATH" >/dev/null
+fi
 print -r -- "$APP_PATH"

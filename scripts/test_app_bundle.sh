@@ -20,4 +20,15 @@ if find "$APP_PATH" -name '.env' -print -quit | grep -q .; then
   exit 1
 fi
 codesign --verify --deep --strict "$APP_PATH"
+if [[ "${SIDEKICK_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
+  SIGNING_DETAILS="$(codesign -dvv "$APP_PATH" 2>&1)"
+  if ! grep -q '^Authority=Developer ID Application:' <<< "$SIGNING_DETAILS"; then
+    print -u2 -- "App must be signed with a Developer ID Application identity"
+    exit 1
+  fi
+  if ! grep -Eq '^TeamIdentifier=.+$' <<< "$SIGNING_DETAILS"; then
+    print -u2 -- "Developer ID signed App must include a TeamIdentifier"
+    exit 1
+  fi
+fi
 print -r -- "Bundle verified: $APP_PATH"

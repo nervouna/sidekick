@@ -25,7 +25,11 @@ import Testing
 }
 
 @Test func popoverHeightIsClamped() {
-    #expect(PopoverLayout.height(forContentHeight: 0) == 400)
-    #expect(PopoverLayout.height(forContentHeight: 310) == 500)
-    #expect(PopoverLayout.height(forContentHeight: 1_000) == 800)
+    #expect(PopoverLayout.width == 400)
+    #expect(PopoverLayout.height(forContentHeight: -50, chromeHeight: 150) == 400)
+    #expect(PopoverLayout.height(forContentHeight: 0, chromeHeight: 150) == 400)
+    #expect(PopoverLayout.height(forContentHeight: 348, chromeHeight: 150) == 500)
+    #expect(PopoverLayout.height(forContentHeight: 648, chromeHeight: 150) == 800)
+    #expect(PopoverLayout.height(forContentHeight: 1_000, chromeHeight: 150) == 800)
+    #expect(PopoverLayout.height(forContentHeight: .infinity, chromeHeight: 150) == 400)
 }

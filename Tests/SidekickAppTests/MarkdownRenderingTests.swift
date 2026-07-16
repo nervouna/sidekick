@@ -101,6 +101,24 @@ func fullSearchConversationPopoverRendersInLightAndDarkMode() {
         )
         renderer.scale = 2
         let image = renderer.nsImage
-        #expect(image?.size == NSSize(width: 400, height: 400))
+        #expect(image?.size == NSSize(width: 400, height: 800))
     }
+}
+
+@Test @MainActor
+func emptyConversationPopoverKeepsItsMinimumHeight() {
+    let fileURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathComponent("session.json")
+    let viewModel = ChatViewModel(sessionStore: SessionStore(fileURL: fileURL))
+    let renderer = ImageRenderer(
+        content: ChatView(
+            viewModel: viewModel,
+            onHeightChange: { _ in },
+            onOpenSettings: {}
+        )
+    )
+
+    renderer.scale = 2
+    #expect(renderer.nsImage?.size == NSSize(width: 400, height: 400))
 }

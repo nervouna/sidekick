@@ -45,7 +45,7 @@ final class ChatViewModel: ObservableObject {
     @Published var activities: [ActivityItem] = []
     @Published var errorMessage: String?
     @Published var isGenerating = false
-    @Published var windowHeight: CGFloat = 400
+    @Published var windowHeight = CGFloat(PopoverLayout.minimumHeight)
 
     var onOpenSettings: (() -> Void)?
 
@@ -163,7 +163,7 @@ final class ChatViewModel: ObservableObject {
         input = ""
         session = ChatSession(createdAt: dateProvider.now())
         try? sessionStore.delete()
-        windowHeight = 400
+        windowHeight = CGFloat(PopoverLayout.minimumHeight)
     }
 
     func cancelGeneration() {
@@ -179,8 +179,13 @@ final class ChatViewModel: ObservableObject {
         errorMessage = "请求已取消"
     }
 
-    func updateContentHeight(_ contentHeight: CGFloat) {
-        let target = CGFloat(PopoverLayout.height(forContentHeight: Double(contentHeight)))
+    func updateLayoutHeights(contentHeight: CGFloat, chromeHeight: CGFloat) {
+        let target = CGFloat(
+            PopoverLayout.height(
+                forContentHeight: Double(contentHeight),
+                chromeHeight: Double(chromeHeight)
+            )
+        )
         if abs(target - windowHeight) > 1 { windowHeight = target }
     }
 
