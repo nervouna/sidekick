@@ -1,5 +1,9 @@
 # Sidekick Repository Instructions
 
+## Delivery
+
+- This repository is a personal-use product. YOLO delivery is allowed: when the user asks to ship, commit the confirmed scope, merge it locally, and push directly to `main` without requiring pull-request review.
+
 ## Human Acceptance Artifacts
 
 - Any `.app` delivered to a human for acceptance testing must be signed with a valid `Developer ID Application` identity.
