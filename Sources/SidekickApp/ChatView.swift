@@ -50,19 +50,18 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    if viewModel.visibleMessages.isEmpty && viewModel.streamingContent.isEmpty {
+                    if viewModel.conversationItems.isEmpty {
                         emptyState
                     }
-                    ForEach(viewModel.visibleMessages) { message in
-                        MessageBubble(message: message)
-                            .id(message.id)
-                    }
-                    ForEach(viewModel.activities) { activity in
-                        ActivityRow(activity: activity)
-                    }
-                    if !viewModel.streamingContent.isEmpty {
-                        MessageBubble(message: ChatMessage(role: .assistant, content: viewModel.streamingContent))
-                            .id("streaming")
+                    ForEach(viewModel.conversationItems) { item in
+                        switch item {
+                        case .message(_, let message):
+                            MessageBubble(message: message)
+                        case .activity(let activity):
+                            ActivityRow(activity: activity)
+                        case .streaming(_, let content):
+                            MessageBubble(message: ChatMessage(role: .assistant, content: content))
+                        }
                     }
                     if let error = viewModel.errorMessage {
                         ErrorRow(message: error, canRetry: !viewModel.session.messages.isEmpty, retry: viewModel.retry)
@@ -77,11 +76,8 @@ struct ChatView: View {
                 )
             }
             .onPreferenceChange(ContentHeightKey.self, perform: viewModel.updateContentHeight)
-            .onChange(of: viewModel.streamingContent) { _, _ in
+            .onChange(of: viewModel.conversationItems) { _, _ in
                 withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
-            .onChange(of: viewModel.session.messages.count) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
             }
         }
     }
@@ -165,7 +161,7 @@ private struct MessageBubble: View {
     var body: some View {
         HStack {
             if message.role == .user { Spacer(minLength: 42) }
-            MarkdownContent(message.content ?? "")
+            SidekickMarkdown(message.content ?? "")
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
                 .background(background, in: RoundedRectangle(cornerRadius: 12))
@@ -175,49 +171,5 @@ private struct MessageBubble: View {
 
     private var background: Color {
         message.role == .user ? Color.accentColor.opacity(0.17) : Color(nsColor: .controlBackgroundColor)
-    }
-}
-
-private struct MarkdownContent: View {
-    let content: String
-    init(_ content: String) { self.content = content }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
-                if part.isCode {
-                    ScrollView(.horizontal) {
-                        Text(part.text)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .padding(8)
-                    }
-                    .background(.black.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
-                } else if !part.text.isEmpty {
-                    Text(markdown: part.text)
-                        .textSelection(.enabled)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var parts: [(text: String, isCode: Bool)] {
-        content.components(separatedBy: "```").enumerated().map { index, raw in
-            guard index.isMultiple(of: 2) == false else { return (raw, false) }
-            let lines = raw.split(separator: "\n", omittingEmptySubsequences: false)
-            let code = lines.count > 1 ? lines.dropFirst().joined(separator: "\n") : raw
-            return (code, true)
-        }
-    }
-}
-
-private extension Text {
-    init(markdown: String) {
-        if let value = try? AttributedString(markdown: markdown) {
-            self.init(value)
-        } else {
-            self.init(markdown)
-        }
     }
 }

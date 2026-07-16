@@ -18,6 +18,25 @@ struct ActivityItem: Identifiable, Equatable {
     }
 }
 
+enum ConversationItem: Identifiable, Equatable {
+    enum ID: Hashable {
+        case message(UUID)
+        case activity(UUID)
+        case activeResponse(UUID)
+    }
+
+    case message(id: ID, message: ChatMessage)
+    case activity(ActivityItem)
+    case streaming(id: ID, content: String)
+
+    var id: ID {
+        switch self {
+        case .message(let id, _), .streaming(let id, _): id
+        case .activity(let activity): .activity(activity.id)
+        }
+    }
+}
+
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var session: ChatSession
@@ -36,6 +55,8 @@ final class ChatViewModel: ObservableObject {
     private let dateProvider: any DateProviding
     private var generationTask: Task<Void, Never>?
     private var generationID = UUID()
+    private(set) var activeInsertionPoint: Int?
+    private var activeResponseID = UUID()
 
     init(
         sessionStore: SessionStore = SessionStore(),
@@ -55,9 +76,37 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    var visibleMessages: [ChatMessage] {
-        session.messages.filter { message in
-            (message.role == .user || message.role == .assistant) && !(message.content ?? "").isEmpty
+    var conversationItems: [ConversationItem] {
+        let messages = Self.visibleMessages(in: session.messages)
+        guard let insertionPoint = activeInsertionPoint else {
+            return messages.map { .message(id: .message($0.id), message: $0) }
+        }
+
+        let split = min(insertionPoint, messages.count)
+        let prefix = messages[..<split].map { ConversationItem.message(id: .message($0.id), message: $0) }
+        let suffix = messages[split...]
+        var items = prefix + activities.map(ConversationItem.activity)
+        for (offset, message) in suffix.enumerated() {
+            let id: ConversationItem.ID = offset == 0 ? .activeResponse(activeResponseID) : .message(message.id)
+            items.append(.message(id: id, message: message))
+        }
+        if suffix.isEmpty, !streamingContent.isEmpty {
+            items.append(.streaming(id: .activeResponse(activeResponseID), content: streamingContent))
+        }
+        return items
+    }
+
+    static func visibleMessages(in messages: [ChatMessage]) -> [ChatMessage] {
+        messages.filter { message in
+            guard let content = message.content, !content.isEmpty else { return false }
+            switch message.role {
+            case .user:
+                return true
+            case .assistant:
+                return message.toolCalls?.isEmpty != false
+            case .system, .tool:
+                return false
+            }
         }
     }
 
@@ -91,7 +140,6 @@ final class ChatViewModel: ObservableObject {
 
         input = ""
         errorMessage = nil
-        activities = []
         session.append(ChatMessage(role: .user, content: text), now: dateProvider.now())
         try? sessionStore.save(session)
         startGeneration()
@@ -100,7 +148,6 @@ final class ChatViewModel: ObservableObject {
     func retry() {
         guard !isGenerating, session.messages.last(where: { $0.role == .user }) != nil else { return }
         errorMessage = nil
-        activities = []
         startGeneration()
     }
 
@@ -111,6 +158,7 @@ final class ChatViewModel: ObservableObject {
         isGenerating = false
         streamingContent = ""
         activities = []
+        activeInsertionPoint = nil
         errorMessage = nil
         input = ""
         session = ChatSession(createdAt: dateProvider.now())
@@ -151,10 +199,10 @@ final class ChatViewModel: ObservableObject {
         }
 
         generationTask?.cancel()
+        beginActiveTimeline()
         let currentID = UUID()
         generationID = currentID
         isGenerating = true
-        streamingContent = ""
         let startingMessages = session.messages
 
         generationTask = Task { [weak self] in
@@ -178,7 +226,14 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    private func handle(_ event: AgentEvent) {
+    func beginActiveTimeline() {
+        activities = []
+        streamingContent = ""
+        activeInsertionPoint = Self.visibleMessages(in: session.messages).count
+        activeResponseID = UUID()
+    }
+
+    func handle(_ event: AgentEvent) {
         switch event {
         case .thinkingStarted:
             completeLastActivity(of: .thinking)
