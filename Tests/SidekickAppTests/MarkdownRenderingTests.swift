@@ -67,6 +67,41 @@ func imageProviderAlwaysBuildsALocalPlaceholder() {
 }
 
 @Test @MainActor
+func messageBubbleUsesContentWidthUntilTheMessageNeedsToWrap() throws {
+    let shortBounds = try renderedBubbleBounds(content: "好的", role: .user)
+    let longBounds = try renderedBubbleBounds(
+        content: String(repeating: "这是一条需要自动换行的较长消息。", count: 6),
+        role: .user
+    )
+
+    #expect(shortBounds.width < 100)
+    #expect(longBounds.width > 240)
+    #expect(longBounds.height > shortBounds.height)
+}
+
+@MainActor
+private func renderedBubbleBounds(content: String, role: MessageRole) throws -> NSRect {
+    let renderer = ImageRenderer(
+        content: MessageBubble(message: ChatMessage(role: role, content: content))
+            .frame(width: 300)
+    )
+    renderer.scale = 1
+
+    let image = try #require(renderer.nsImage)
+    let data = try #require(image.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    var bounds = NSRect.null
+
+    for y in 0..<bitmap.pixelsHigh {
+        for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.01 {
+            bounds = bounds.union(NSRect(x: x, y: y, width: 1, height: 1))
+        }
+    }
+
+    return try #require(bounds.isNull ? nil : bounds)
+}
+
+@Test @MainActor
 func fullSearchConversationPopoverRendersInLightAndDarkMode() {
     let fileURL = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)

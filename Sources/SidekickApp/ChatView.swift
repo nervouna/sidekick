@@ -197,13 +197,17 @@ private struct ErrorRow: View {
     }
 }
 
-private struct MessageBubble: View {
+struct MessageBubble: View {
     let message: ChatMessage
 
     var body: some View {
         HStack {
             if message.role == .user { Spacer(minLength: 42) }
-            SidekickMarkdown(message.content ?? "")
+            ViewThatFits(in: .horizontal) {
+                SidekickMarkdown(message.content ?? "")
+                    .fixedSize(horizontal: true, vertical: false)
+                SidekickMarkdown(message.content ?? "")
+            }
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
                 .background(background, in: RoundedRectangle(cornerRadius: 12))
