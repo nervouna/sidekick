@@ -37,7 +37,8 @@ final class MenuBarController: NSObject {
                 onHeightChange: { [weak self] height in
                     self?.popover.contentSize = NSSize(width: PopoverLayout.width, height: height)
                 },
-                onOpenSettings: onOpenSettings
+                onOpenSettings: onOpenSettings,
+                onDismiss: { [weak self] in self?.closePopover() }
             )
         )
     }
@@ -50,19 +51,16 @@ final class MenuBarController: NSObject {
             statusItem.menu = nil
             return
         }
-        togglePopover()
+        toggle()
     }
 
-    private func togglePopover() {
+    /// Entry point shared by the status-item click and the global hot key.
+    func toggle() {
         if popover.isShown {
-            popover.performClose(nil)
-            return
+            closePopover()
+        } else {
+            showPopover()
         }
-        viewModel.refreshForPresentation()
-        guard let button = statusItem.button else { return }
-        popover.contentSize = NSSize(width: PopoverLayout.width, height: viewModel.windowHeight)
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     func showPopover() {
@@ -71,6 +69,13 @@ final class MenuBarController: NSObject {
         popover.contentSize = NSSize(width: PopoverLayout.width, height: viewModel.windowHeight)
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
+        // The popover's window exists by now, so the composer can take focus
+        // and the user can type without clicking first.
+        viewModel.requestComposerFocus()
+    }
+
+    func closePopover() {
+        popover.performClose(nil)
     }
 
     @objc private func showSettings() { onOpenSettings() }

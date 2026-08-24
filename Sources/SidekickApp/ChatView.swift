@@ -5,6 +5,7 @@ struct ChatView: View {
     @ObservedObject var viewModel: ChatViewModel
     let onHeightChange: (CGFloat) -> Void
     let onOpenSettings: () -> Void
+    let onDismiss: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,8 +112,13 @@ struct ChatView: View {
     private var composer: some View {
         VStack(spacing: 7) {
             ZStack(alignment: .topLeading) {
-                ComposerTextView(text: $viewModel.input, onSubmit: viewModel.send)
-                    .frame(height: 64)
+                ComposerTextView(
+                    text: $viewModel.input,
+                    focusRequest: viewModel.composerFocusRequest,
+                    onSubmit: viewModel.send,
+                    onDismiss: onDismiss
+                )
+                .frame(height: 64)
                 if viewModel.input.isEmpty {
                     Text("向 Sidekick 提问…")
                         .foregroundStyle(.tertiary)

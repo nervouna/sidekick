@@ -21,7 +21,7 @@ public struct HotKeyModifiers: OptionSet, Codable, Hashable, Sendable {
     public static let qualifying: HotKeyModifiers = [.control, .option, .command]
 
     /// Apple's canonical display order.
-    var displayString: String {
+    public var displayString: String {
         var glyphs = ""
         if contains(.control) { glyphs += "⌃" }
         if contains(.option) { glyphs += "⌥" }

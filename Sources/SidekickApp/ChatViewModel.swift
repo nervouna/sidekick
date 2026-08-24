@@ -108,6 +108,10 @@ final class ChatViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isGenerating = false
     @Published var windowHeight = CGFloat(PopoverLayout.minimumHeight)
+    /// Bumped whenever the composer should take focus, e.g. when the popover
+    /// is summoned. The view model stays out of window management; the
+    /// composer observes this counter and makes itself first responder.
+    @Published private(set) var composerFocusRequest = 0
 
     var onOpenSettings: (() -> Void)?
 
@@ -218,6 +222,10 @@ final class ChatViewModel: ObservableObject {
                 return false
             }
         }
+    }
+
+    func requestComposerFocus() {
+        composerFocusRequest += 1
     }
 
     func refreshForPresentation() {

@@ -3,7 +3,12 @@ import SwiftUI
 
 struct ComposerTextView: NSViewRepresentable {
     @Binding var text: String
+    /// Monotonic counter; every increment asks the text view to take focus.
+    /// A counter rather than a Bool so repeat requests (reopening the popover
+    /// twice without typing) still register.
+    let focusRequest: Int
     let onSubmit: () -> Void
+    let onDismiss: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
@@ -17,6 +22,7 @@ struct ComposerTextView: NSViewRepresentable {
         let textView = SubmitTextView()
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
+        textView.onDismiss = onDismiss
         textView.isRichText = false
         textView.drawsBackground = false
         textView.font = .systemFont(ofSize: NSFont.systemFontSize)
@@ -33,6 +39,11 @@ struct ComposerTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? SubmitTextView else { return }
         textView.onSubmit = onSubmit
+        textView.onDismiss = onDismiss
+        if context.coordinator.lastFocusRequest != focusRequest {
+            context.coordinator.lastFocusRequest = focusRequest
+            focus(textView)
+        }
         // While an IME composition (e.g. pinyin) is in progress, the binding
         // round-trip can lag a keystroke behind. Overwriting `.string` here
         // would cancel the in-flight composition and drop the marked text.
@@ -40,8 +51,19 @@ struct ComposerTextView: NSViewRepresentable {
         if textView.string != text { textView.string = text }
     }
 
+    /// The popover's window may not exist yet on the pass that carries a new
+    /// focus request, so fall back to the next runloop turn once.
+    private func focus(_ textView: SubmitTextView) {
+        if textView.window?.makeFirstResponder(textView) == true { return }
+        DispatchQueue.main.async { [weak textView] in
+            guard let textView else { return }
+            textView.window?.makeFirstResponder(textView)
+        }
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerTextView
+        var lastFocusRequest = 0
         init(parent: ComposerTextView) { self.parent = parent }
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
@@ -52,6 +74,14 @@ struct ComposerTextView: NSViewRepresentable {
 
 private final class SubmitTextView: NSTextView {
     var onSubmit: (() -> Void)?
+    var onDismiss: (() -> Void)?
+
+    // Esc closes the popover. AppKit routes Esc here only once no IME
+    // candidate window is open — the input method consumes the first press to
+    // cancel its own composition, which is the behavior we want.
+    override func cancelOperation(_ sender: Any?) {
+        onDismiss?()
+    }
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76

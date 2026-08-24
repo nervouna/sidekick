@@ -130,7 +130,8 @@ func fullSearchConversationPopoverRendersInLightAndDarkMode() {
             content: ChatView(
                 viewModel: viewModel,
                 onHeightChange: { _ in },
-                onOpenSettings: {}
+                onOpenSettings: {},
+                onDismiss: {}
             )
             .environment(\.colorScheme, colorScheme)
         )
@@ -150,7 +151,8 @@ func emptyConversationPopoverKeepsItsMinimumHeight() {
         content: ChatView(
             viewModel: viewModel,
             onHeightChange: { _ in },
-            onOpenSettings: {}
+            onOpenSettings: {},
+            onDismiss: {}
         )
     )
 

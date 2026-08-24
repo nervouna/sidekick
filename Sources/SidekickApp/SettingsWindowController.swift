@@ -4,10 +4,20 @@ import SidekickCore
 
 @MainActor
 final class SettingsWindowController: NSWindowController {
-    init(keyProvider: KeyProvider) {
-        let viewModel = SettingsViewModel(keyProvider: keyProvider)
+    init(
+        keyProvider: KeyProvider,
+        hotKeyStore: any HotKeyStoring,
+        initialHotKeyStatus: String,
+        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void
+    ) {
+        let viewModel = SettingsViewModel(
+            keyProvider: keyProvider,
+            hotKeyStore: hotKeyStore,
+            initialHotKeyStatus: initialHotKeyStatus,
+            onRebindHotKey: onRebindHotKey
+        )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 310),
+            contentRect: NSRect(x: 0, y: 0, width: 430, height: 400),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -37,15 +47,50 @@ final class SettingsViewModel: ObservableObject {
     @Published var isValidating = false
     @Published var deepSeekFromEnvironment = false
     @Published var tavilyFromEnvironment = false
+    @Published private(set) var hotKey: HotKeyBinding
+    @Published private(set) var hotKeyStatus: String
 
     private let keyProvider: KeyProvider
     private let validator: CredentialValidator
+    private let hotKeyStore: any HotKeyStoring
+    private let onRebindHotKey: (HotKeyBinding) throws -> Void
 
-    init(keyProvider: KeyProvider, validator: CredentialValidator = CredentialValidator()) {
+    init(
+        keyProvider: KeyProvider,
+        validator: CredentialValidator = CredentialValidator(),
+        hotKeyStore: any HotKeyStoring,
+        initialHotKeyStatus: String,
+        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void
+    ) {
         self.keyProvider = keyProvider
         self.validator = validator
+        self.hotKeyStore = hotKeyStore
+        self.onRebindHotKey = onRebindHotKey
+        hotKey = hotKeyStore.load()
+        hotKeyStatus = initialHotKeyStatus
         reload()
     }
+
+    func applyHotKey(_ binding: HotKeyBinding) {
+        guard binding != hotKey else { return }
+        guard binding.isValid else {
+            hotKeyStatus = HotKeyError.invalidBinding.localizedDescription
+            return
+        }
+        do {
+            try onRebindHotKey(binding)
+            hotKeyStore.save(binding)
+            hotKey = binding
+            hotKeyStatus = "已启用 \(binding.displayString)"
+        } catch {
+            hotKeyStatus = error.localizedDescription
+            // Registering a new chord tears the old one down first, so restore
+            // it rather than leaving the user with no shortcut at all.
+            try? onRebindHotKey(hotKey)
+        }
+    }
+
+    func resetHotKey() { applyHotKey(.default) }
 
     func reload() {
         do {
@@ -106,6 +151,8 @@ private struct SettingsView: View {
             if !viewModel.status.isEmpty {
                 Text(viewModel.status).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
+            Divider()
+            hotKeySection
             Spacer()
             HStack {
                 Button("删除密钥", role: .destructive, action: viewModel.deleteKeys)
@@ -115,7 +162,24 @@ private struct SettingsView: View {
             }
         }
         .padding(22)
-        .frame(width: 430, height: 310)
+        .frame(width: 430, height: 400)
+    }
+
+    private var hotKeySection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("全局快捷键").font(.title2.bold())
+            HStack(spacing: 10) {
+                ShortcutRecorder(binding: viewModel.hotKey, onRecord: viewModel.applyHotKey)
+                    .frame(height: 26)
+                Button("恢复默认", action: viewModel.resetHotKey)
+            }
+            Text(viewModel.hotKeyStatus.isEmpty
+                 ? "点按后按下想用的组合键，可随时唤出或收起对话。"
+                 : viewModel.hotKeyStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func keyField(_ title: String, text: Binding<String>, environment: Bool) -> some View {
