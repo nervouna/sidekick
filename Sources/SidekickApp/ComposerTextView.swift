@@ -33,6 +33,10 @@ struct ComposerTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? SubmitTextView else { return }
         textView.onSubmit = onSubmit
+        // While an IME composition (e.g. pinyin) is in progress, the binding
+        // round-trip can lag a keystroke behind. Overwriting `.string` here
+        // would cancel the in-flight composition and drop the marked text.
+        guard !textView.hasMarkedText() else { return }
         if textView.string != text { textView.string = text }
     }
 
@@ -51,10 +55,26 @@ private final class SubmitTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let isReturn = event.keyCode == 36 || event.keyCode == 76
-        if isReturn && !event.modifierFlags.contains(.shift) {
+        // While an IME candidate window is open, Return confirms the
+        // candidate rather than submitting; let AppKit's input handling see it.
+        if isReturn && !event.modifierFlags.contains(.shift) && !hasMarkedText() {
             onSubmit?()
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    // AppKit doesn't reliably call the delegate's textDidChange for pure IME
+    // composition previews, only for committed edits. Without this, the
+    // SwiftUI-side placeholder and character count never react while typing
+    // pinyin (or any other marked text) is in progress.
+    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        delegate?.textDidChange?(Notification(name: NSText.didChangeNotification, object: self))
+    }
+
+    override func unmarkText() {
+        super.unmarkText()
+        delegate?.textDidChange?(Notification(name: NSText.didChangeNotification, object: self))
     }
 }
