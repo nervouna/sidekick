@@ -81,7 +81,10 @@ final class SettingsViewModel: ObservableObject {
             try onRebindHotKey(binding)
             hotKeyStore.save(binding)
             hotKey = binding
-            hotKeyStatus = "已启用 \(binding.displayString)"
+            // Carbon returns noErr even for chords another app already owns
+            // (⌘Space registers fine and simply never fires), so this can
+            // only claim the binding was set, not that it will work.
+            hotKeyStatus = "已设置 \(binding.displayString)；若按下无响应，说明已被其他 App 占用，请换一个组合键。"
         } catch {
             hotKeyStatus = error.localizedDescription
             // Registering a new chord tears the old one down first, so restore

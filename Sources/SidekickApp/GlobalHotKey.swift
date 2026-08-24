@@ -41,8 +41,12 @@ final class GlobalHotKeyMonitor {
     }
 
     /// Replaces any previous registration. Throws when the binding is unusable
-    /// or when Carbon refuses it — most often because another app owns the
-    /// chord already.
+    /// or when Carbon refuses it outright.
+    ///
+    /// Note that success is not proof the shortcut will fire: Carbon returns
+    /// `noErr` for chords another app already owns — ⌘Space registers cleanly
+    /// and simply never delivers an event — so conflicts cannot be detected
+    /// here and have to be discovered by pressing the key.
     func register(_ binding: HotKeyBinding) throws {
         unregister()
         guard binding.isValid else { throw HotKeyError.invalidBinding }
