@@ -2,6 +2,12 @@
 
 Sidekick 是一个原生 macOS 菜单栏 AI 对话 App。它使用 DeepSeek V4 Flash 流式回答，并在需要最新信息时通过 Tavily 自动搜索网页。
 
+## 下载
+
+[下载最新 macOS 版本](https://github.com/nervouna/sidekick/releases/latest/download/Sidekick-macOS-arm64.zip)
+
+公开下载包适用于 Apple Silicon Mac，已使用 Developer ID Application 签名并通过 Apple 公证。安装后请在设置中填写 DeepSeek 与 Tavily API Key。
+
 ## 要求
 
 - macOS 14 或更高版本
@@ -46,7 +52,7 @@ UI 自动验收时可让调试版启动后直接展开弹窗：`Sidekick --open-
 ./scripts/eval_prompt.sh
 ```
 
-生成的本地调试 App 位于 `build/Sidekick.app`。它采用本机临时签名，仅用于开发与个人调试，尚未包含 Developer ID 签名、公证或发布流程。
+生成的本地调试 App 位于 `build/Sidekick.app`。它采用本机临时签名，仅用于开发与个人调试，不应作为公开发布产物；面向用户的已签名、公证版本由 GitHub Releases 提供。
 
 ## 使用
 
