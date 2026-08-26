@@ -40,4 +40,6 @@ import Testing
     decoder.dateDecodingStrategy = .iso8601
     let session = try decoder.decode(ChatSession.self, from: Data(json.utf8))
     #expect(session.messages.first?.completionState == nil)
+    #expect(session.messages.first?.responseEndedAt == nil)
+    #expect(session.messages.first?.tokenCount == nil)
 }

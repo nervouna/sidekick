@@ -68,6 +68,21 @@ func directReplyKeepsItsTimelinePositionWhenCommitted() {
 }
 
 @Test @MainActor
+func completedReplyStoresUsageAcrossEveryModelCall() {
+    let user = ChatMessage(role: .user, content: "Question")
+    let final = ChatMessage(role: .assistant, content: "Answer", completionState: .complete)
+    let viewModel = makeViewModel(messages: [user])
+
+    viewModel.beginActiveTimeline()
+    viewModel.handle(.usage(TokenUsage(totalTokens: 800), estimatedPromptTokens: 700))
+    viewModel.handle(.usage(TokenUsage(totalTokens: 720), estimatedPromptTokens: 600))
+    viewModel.handle(.finished([user, final]))
+
+    #expect(viewModel.session.messages.last?.tokenCount == 1_520)
+    #expect(viewModel.session.messages.last?.responseEndedAt != nil)
+}
+
+@Test @MainActor
 func searchActivitiesRemainBeforeTheFinalReply() {
     let user = ChatMessage(role: .user, content: "Latest?")
     let toolCall = ToolCall(id: "call", function: ToolFunction(name: "web_search", arguments: "{}"))

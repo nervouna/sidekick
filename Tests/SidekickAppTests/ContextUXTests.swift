@@ -17,6 +17,7 @@ private struct ImmediateDeepSeek: DeepSeekStreaming {
     func stream(request: ModelRequest, apiKey: String) -> AsyncThrowingStream<ModelStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             continuation.yield(.contentDelta("answer"))
+            continuation.yield(.usage(TokenUsage(totalTokens: 1_520)))
             continuation.yield(.finished(.stop))
             continuation.finish()
         }
@@ -144,7 +145,28 @@ func finalSaveFailureKeepsGeneratedAnswerInMemoryAndShowsNonFatalError() async {
 
     #expect(viewModel.session.messages.last?.content == "answer")
     #expect(viewModel.session.messages.last?.completionState == .complete)
+    #expect(viewModel.session.messages.last?.tokenCount == 1_520)
+    #expect(viewModel.session.messages.last?.responseEndedAt != nil)
     #expect(viewModel.errorMessage == "回答已生成，但无法保存本次会话")
+}
+
+@Test @MainActor
+func regenerateHistoricalReplyDiscardsDependentTurnsAndKeepsTheOriginalQuestion() async {
+    let viewModel = contextViewModel()
+    let firstUser = ChatMessage(role: .user, content: "first")
+    let firstReply = ChatMessage(role: .assistant, content: "old first answer", completionState: .complete)
+    let secondUser = ChatMessage(role: .user, content: "follow-up")
+    let secondReply = ChatMessage(role: .assistant, content: "old follow-up answer", completionState: .complete)
+    viewModel.session = ChatSession(messages: [firstUser, firstReply, secondUser, secondReply])
+
+    viewModel.regenerate(replyID: firstReply.id)
+    while viewModel.isGenerating { await Task.yield() }
+
+    #expect(viewModel.session.messages.first?.id == firstUser.id)
+    #expect(viewModel.session.messages.filter { $0.role == .user }.map(\.content) == ["first"])
+    #expect(!viewModel.session.messages.contains { $0.id == firstReply.id || $0.id == secondUser.id || $0.id == secondReply.id })
+    #expect(viewModel.session.messages.last?.content == "answer")
+    #expect(viewModel.session.messages.last?.tokenCount == 1_520)
 }
 
 @Test @MainActor

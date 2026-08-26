@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SidekickCore
 
@@ -69,7 +70,10 @@ struct ChatView: View {
                         case .message(_, let message):
                             MessageBubble(
                                 message: message,
-                                markdownRenderGeneration: viewModel.markdownRenderGeneration
+                                markdownRenderGeneration: viewModel.markdownRenderGeneration,
+                                canRegenerate: !viewModel.isGenerating,
+                                onCopy: { copyMarkdown(message.content ?? "") },
+                                onRegenerate: { viewModel.regenerate(replyID: message.id) }
                             )
                         case .activity(let activity):
                             ActivityRow(activity: activity)
@@ -78,7 +82,8 @@ struct ChatView: View {
                         case .streaming(_, let content):
                             MessageBubble(
                                 message: ChatMessage(role: .assistant, content: content),
-                                markdownRenderGeneration: viewModel.markdownRenderGeneration
+                                markdownRenderGeneration: viewModel.markdownRenderGeneration,
+                                showsResponseMetadata: false
                             )
                         case .contextNotice:
                             ContextNoticeRow()
@@ -236,6 +241,10 @@ private struct ContextNoticeRow: View {
 struct MessageBubble: View {
     let message: ChatMessage
     var markdownRenderGeneration = 0
+    var showsResponseMetadata = true
+    var canRegenerate = true
+    var onCopy: () -> Void = {}
+    var onRegenerate: () -> Void = {}
 
     var body: some View {
         HStack {
@@ -259,6 +268,15 @@ struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             SidekickMarkdown(message.content ?? "")
                 .id(markdownRenderGeneration)
+            if message.role == .assistant && showsResponseMetadata {
+                ResponseMetadataRow(
+                    endedAt: message.responseEndedAt ?? message.createdAt,
+                    tokenCount: message.tokenCount,
+                    canRegenerate: canRegenerate,
+                    onCopy: onCopy,
+                    onRegenerate: onRegenerate
+                )
+            }
             if let label = completionLabel {
                 Text(label)
                     .font(.caption2)
@@ -276,4 +294,95 @@ struct MessageBubble: View {
         case .complete, .none: nil
         }
     }
+}
+
+private struct ResponseMetadataRow: View {
+    let endedAt: Date
+    let tokenCount: Int?
+    let canRegenerate: Bool
+    let onCopy: () -> Void
+    let onRegenerate: () -> Void
+
+    var body: some View {
+        HStack(spacing: 7) {
+            metadataButton(
+                systemName: "doc.on.doc",
+                label: "复制 Markdown",
+                action: onCopy
+            )
+            metadataButton(
+                systemName: "arrow.clockwise",
+                label: "重新生成回复",
+                action: onRegenerate
+            )
+            .disabled(!canRegenerate)
+            Text(ResponseMetadataFormatter.timestamp(endedAt))
+            Text(tokenCount.map(ResponseMetadataFormatter.tokens) ?? "-- tokens")
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func metadataButton(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.caption)
+                .frame(minWidth: 14, minHeight: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(label)
+        .help(label)
+    }
+}
+
+enum ResponseMetadataFormatter {
+    static func timestamp(
+        _ date: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let elapsed = now.timeIntervalSince(date)
+        if elapsed >= 0, elapsed < 60 * 60 {
+            let minutes = Int(elapsed / 60)
+            return minutes == 0 ? "刚刚" : "\(minutes) 分钟前"
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = timeZone
+        formatter.dateFormat = calendar.isDate(date, inSameDayAs: now)
+            ? "HH:mm"
+            : "yyyy-MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
+
+    static func tokens(_ count: Int) -> String {
+        let nonnegativeCount = max(0, count)
+        if nonnegativeCount >= 1_000_000 {
+            return "\(rounded(nonnegativeCount, divisor: 1_000_000))M tokens"
+        }
+        if nonnegativeCount >= 10_000 {
+            return "\(rounded(nonnegativeCount, divisor: 1_000))K tokens"
+        }
+        return "\(nonnegativeCount.formatted(.number.grouping(.automatic))) tokens"
+    }
+
+    private static func rounded(_ count: Int, divisor: Int) -> Int {
+        (count + divisor / 2) / divisor
+    }
+}
+
+private func copyMarkdown(_ markdown: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(markdown, forType: .string)
 }

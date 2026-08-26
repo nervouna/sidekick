@@ -135,6 +135,7 @@ final class ChatViewModel: ObservableObject {
     private var streamingHeightTask: Task<Void, Never>?
     private(set) var showsContextTrimNotice = false
     private var activeUserMessageID: UUID?
+    private var activeTokenCount = 0
 
     init(
         sessionStore: any SessionStoring = SessionStore(),
@@ -308,6 +309,47 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func regenerate(replyID: UUID) {
+        guard !isGenerating,
+              let replyIndex = session.messages.firstIndex(where: {
+                  $0.id == replyID && $0.role == .assistant && $0.toolCalls?.isEmpty != false
+              }),
+              let userIndex = session.messages[..<replyIndex].lastIndex(where: { $0.role == .user })
+        else { return }
+
+        do {
+            guard try keyProvider.key(for: .deepSeek) != nil else {
+                errorMessage = SidekickError.missingKey("DeepSeek").localizedDescription
+                onOpenSettings?()
+                return
+            }
+            guard try keyProvider.key(for: .tavily) != nil else {
+                errorMessage = SidekickError.missingKey("Tavily").localizedDescription
+                onOpenSettings?()
+                return
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
+        let user = session.messages[userIndex]
+        var candidate = session
+        candidate.messages.removeSubrange((userIndex + 1)..<candidate.messages.count)
+        do {
+            let prepared = try prepare(candidate.messages, at: dateProvider.now())
+            candidate.messages = apply(prepared, to: candidate.messages)
+            try sessionStore.save(candidate)
+            session = candidate
+            showsContextTrimNotice = showsContextTrimNotice || !prepared.evictedMessageIDs.isEmpty
+            activeUserMessageID = user.id
+            errorMessage = nil
+            startGeneration(prepared: prepared)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func newConversation() {
         generationTask?.cancel()
         generationTask = nil
@@ -322,6 +364,7 @@ final class ChatViewModel: ObservableObject {
         estimator = ContextEstimator()
         showsContextTrimNotice = false
         activeUserMessageID = nil
+        activeTokenCount = 0
         session = ChatSession(createdAt: dateProvider.now())
         try? sessionStore.delete()
         windowHeight = CGFloat(PopoverLayout.minimumHeight)
@@ -332,14 +375,22 @@ final class ChatViewModel: ObservableObject {
         generationTask = nil
         generationID = UUID()
         isGenerating = false
+        let endedAt = dateProvider.now()
         if !streamingContent.isEmpty {
             session.append(ChatMessage(
                 role: .assistant,
                 content: streamingContent,
-                completionState: .cancelled
-            ), now: dateProvider.now())
+                completionState: .cancelled,
+                responseEndedAt: endedAt,
+                tokenCount: activeTokenCount
+            ), now: endedAt)
         } else {
-            session.append(ChatMessage(role: .assistant, completionState: .cancelled), now: dateProvider.now())
+            session.append(ChatMessage(
+                role: .assistant,
+                completionState: .cancelled,
+                responseEndedAt: endedAt,
+                tokenCount: activeTokenCount
+            ), now: endedAt)
         }
         do {
             try sessionStore.save(session)
@@ -426,9 +477,11 @@ final class ChatViewModel: ObservableObject {
         resetStreamingLayout()
         activities = []
         streamingContent = ""
+        activeUserMessageID = session.messages.last(where: { $0.role == .user })?.id
         activeInsertionPoint = Self.visibleMessages(in: session.messages).count
         activeResponseID = UUID()
         activeActivitySummaryID = UUID()
+        activeTokenCount = 0
     }
 
     func handle(_ event: AgentEvent) {
@@ -451,6 +504,7 @@ final class ChatViewModel: ObservableObject {
             completeLastActivity(of: .search)
             streamingContent = ""
         case .usage(let usage, let estimatedPromptTokens):
+            activeTokenCount += usage.totalTokens
             estimator.observe(
                 actualPromptTokens: usage.promptTokens,
                 estimatedPromptTokens: estimatedPromptTokens
@@ -466,7 +520,9 @@ final class ChatViewModel: ObservableObject {
         case .finished(let messages):
             finishStreamingLayout()
             session.messages = mergeAgentMessages(messages)
-            session.lastMessageAt = dateProvider.now()
+            let endedAt = dateProvider.now()
+            stampActiveResponse(endedAt: endedAt)
+            session.lastMessageAt = endedAt
             streamingContent = ""
             var didSave = true
             do {
@@ -485,7 +541,9 @@ final class ChatViewModel: ObservableObject {
             finishStreamingLayout()
             if let messages {
                 session.messages = mergeAgentMessages(messages)
-                session.lastMessageAt = dateProvider.now()
+                let endedAt = dateProvider.now()
+                stampActiveResponse(endedAt: endedAt)
+                session.lastMessageAt = endedAt
                 do {
                     try sessionStore.save(session)
                 } catch {
@@ -497,6 +555,19 @@ final class ChatViewModel: ObservableObject {
             streamingContent = ""
             errorMessage = message
         }
+    }
+
+    private func stampActiveResponse(endedAt: Date) {
+        guard let activeUserMessageID,
+              let userIndex = session.messages.firstIndex(where: { $0.id == activeUserMessageID }),
+              let replyIndex = session.messages.indices.reversed().first(where: { index in
+                  index > userIndex
+                      && session.messages[index].role == .assistant
+                      && session.messages[index].toolCalls?.isEmpty != false
+              })
+        else { return }
+        session.messages[replyIndex].responseEndedAt = endedAt
+        session.messages[replyIndex].tokenCount = activeTokenCount
     }
 
     private func prepare(_ messages: [ChatMessage], at date: Date) throws -> PreparedConversation {

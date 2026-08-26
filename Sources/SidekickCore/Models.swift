@@ -38,6 +38,8 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var toolCallID: String?
     public var completionState: AssistantCompletionState?
     public var createdAt: Date
+    public var responseEndedAt: Date?
+    public var tokenCount: Int?
 
     public init(
         id: UUID = UUID(),
@@ -47,7 +49,9 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         toolCalls: [ToolCall]? = nil,
         toolCallID: String? = nil,
         completionState: AssistantCompletionState? = nil,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        responseEndedAt: Date? = nil,
+        tokenCount: Int? = nil
     ) {
         self.id = id
         self.role = role
@@ -57,6 +61,8 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         self.toolCallID = toolCallID
         self.completionState = completionState
         self.createdAt = createdAt
+        self.responseEndedAt = responseEndedAt
+        self.tokenCount = tokenCount
     }
 }
 
