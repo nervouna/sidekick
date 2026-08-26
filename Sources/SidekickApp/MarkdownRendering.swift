@@ -50,7 +50,6 @@ struct SidekickMarkdown: View {
             .markdownTheme(.sidekick)
             .markdownImageProvider(NoNetworkImageProvider())
             .environment(\.openURL, MarkdownLinkPolicy.openURLAction)
-            .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
