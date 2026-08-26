@@ -13,6 +13,4 @@
 
 ## Public Releases
 
-- Public release artifacts must be signed with `Developer ID Application`, accepted by Apple notarization, and carry a stapled notarization ticket.
-- Before publication, extract the final archive and verify it with `codesign --verify --deep --strict`, `xcrun stapler validate`, and Gatekeeper. Gatekeeper must report `Notarized Developer ID`.
-- The release tag must resolve to the exact source commit used to build the artifact. After publication, re-download the asset and verify its digest and distribution gates.
+- Use `$release-sidekick-macos` for Apple notarization and public GitHub Releases. A Developer ID acceptance package is not a public release artifact.
