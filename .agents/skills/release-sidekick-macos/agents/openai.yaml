@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Sidekick for macOS"
+  short_description: "Prepare or publish a notarized macOS release"
+  default_prompt: "Use $release-sidekick-macos to prepare a notarized Sidekick macOS release and report each verification gate."

@@ -21,13 +21,34 @@ if find "$APP_PATH" -name '.env' -print -quit | grep -q .; then
 fi
 codesign --verify --deep --strict "$APP_PATH"
 if [[ "${SIDEKICK_REQUIRE_DEVELOPER_ID:-0}" == "1" ]]; then
-  SIGNING_DETAILS="$(codesign -dvv "$APP_PATH" 2>&1)"
+  SIGNING_DETAILS="$(codesign -dvvv "$APP_PATH" 2>&1)"
   if ! grep -q '^Authority=Developer ID Application:' <<< "$SIGNING_DETAILS"; then
     print -u2 -- "App must be signed with a Developer ID Application identity"
     exit 1
   fi
   if ! grep -Eq '^TeamIdentifier=.+$' <<< "$SIGNING_DETAILS"; then
     print -u2 -- "Developer ID signed App must include a TeamIdentifier"
+    exit 1
+  fi
+  if [[ -n "${SIDEKICK_EXPECTED_TEAM_ID:-}" ]] && \
+      ! grep -q "^TeamIdentifier=${SIDEKICK_EXPECTED_TEAM_ID}$" <<< "$SIGNING_DETAILS"; then
+    print -u2 -- "Developer ID signed App has an unexpected TeamIdentifier"
+    exit 1
+  fi
+  if ! grep -Eq '^CodeDirectory .*flags=.*runtime' <<< "$SIGNING_DETAILS"; then
+    print -u2 -- "Developer ID signed App must enable Hardened Runtime"
+    exit 1
+  fi
+  if ! grep -Eq '^Timestamp=.+$' <<< "$SIGNING_DETAILS"; then
+    print -u2 -- "Developer ID signed App must include a trusted timestamp"
+    exit 1
+  fi
+fi
+if [[ "${SIDEKICK_REQUIRE_NOTARIZED:-0}" == "1" ]]; then
+  xcrun stapler validate "$APP_PATH"
+  GATEKEEPER_DETAILS="$(spctl -a -vvv -t exec "$APP_PATH" 2>&1)"
+  if ! grep -q '^source=Notarized Developer ID$' <<< "$GATEKEEPER_DETAILS"; then
+    print -u2 -- "Gatekeeper must report Notarized Developer ID"
     exit 1
   fi
 fi

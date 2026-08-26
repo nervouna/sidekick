@@ -8,5 +8,6 @@ export CLANG_MODULE_CACHE_PATH="$CACHE_ROOT/clang"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CACHE_ROOT/swift"
 
 swift test --package-path "$ROOT"
+"$ROOT/scripts/test_release_app.sh"
 APP_PATH="$(SIDEKICK_BUILD_CONFIGURATION=release "$ROOT/scripts/build_app.sh" | tail -n 1)"
 "$ROOT/scripts/test_app_bundle.sh" "$APP_PATH"
