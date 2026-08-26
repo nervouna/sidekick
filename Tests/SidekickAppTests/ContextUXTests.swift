@@ -166,3 +166,16 @@ func popoverRefreshExpiresSessionAtThirtyMinutesAndDeletesFile() throws {
     #expect(viewModel.session.messages.isEmpty)
     #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
+
+@Test @MainActor
+func popoverRefreshRebuildsMarkdownWithoutChangingTheConversation() {
+    let message = ChatMessage(role: .assistant, content: "[Link](https://example.com)")
+    let viewModel = contextViewModel()
+    viewModel.session = ChatSession(messages: [message])
+    let originalItems = viewModel.conversationItems
+
+    viewModel.refreshForPresentation()
+
+    #expect(viewModel.markdownRenderGeneration == 1)
+    #expect(viewModel.conversationItems == originalItems)
+}

@@ -58,6 +58,15 @@ func markdownLinkPolicyOnlyAllowsAbsoluteWebURLs() {
     #expect(!MarkdownLinkPolicy.allows(URL(string: "relative/path")!))
 }
 
+@Test
+func markdownLinkPolicyDelegatesAllowedURLsToTheSystem() {
+    let allowedURL = URL(string: "https://example.com/answer")!
+    let blockedURL = URL(fileURLWithPath: "/tmp/secret")
+
+    #expect(MarkdownLinkPolicy.disposition(for: allowedURL) == .systemAction)
+    #expect(MarkdownLinkPolicy.disposition(for: blockedURL) == .discarded)
+}
+
 @Test @MainActor
 func imageProviderAlwaysBuildsALocalPlaceholder() {
     let provider = NoNetworkImageProvider()

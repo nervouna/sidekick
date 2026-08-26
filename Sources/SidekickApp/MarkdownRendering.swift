@@ -2,15 +2,27 @@ import SwiftUI
 import MarkdownUI
 
 enum MarkdownLinkPolicy {
+    enum Disposition: Equatable {
+        case systemAction
+        case discarded
+    }
+
     static func allows(_ url: URL) -> Bool {
         guard url.host != nil, let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http" || scheme == "https"
     }
 
+    static func disposition(for url: URL) -> Disposition {
+        allows(url) ? .systemAction : .discarded
+    }
+
     @MainActor
     static var openURLAction: OpenURLAction {
         OpenURLAction { url in
-            allows(url) ? .systemAction : .discarded
+            switch disposition(for: url) {
+            case .systemAction: .systemAction
+            case .discarded: .discarded
+            }
         }
     }
 }

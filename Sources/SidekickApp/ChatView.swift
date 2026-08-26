@@ -67,13 +67,19 @@ struct ChatView: View {
                     ForEach(viewModel.conversationItems) { item in
                         switch item {
                         case .message(_, let message):
-                            MessageBubble(message: message)
+                            MessageBubble(
+                                message: message,
+                                markdownRenderGeneration: viewModel.markdownRenderGeneration
+                            )
                         case .activity(let activity):
                             ActivityRow(activity: activity)
                         case .activitySummary(let summary):
                             ActivitySummaryRow(summary: summary)
                         case .streaming(_, let content):
-                            MessageBubble(message: ChatMessage(role: .assistant, content: content))
+                            MessageBubble(
+                                message: ChatMessage(role: .assistant, content: content),
+                                markdownRenderGeneration: viewModel.markdownRenderGeneration
+                            )
                         case .contextNotice:
                             ContextNoticeRow()
                         }
@@ -229,6 +235,7 @@ private struct ContextNoticeRow: View {
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var markdownRenderGeneration = 0
 
     var body: some View {
         HStack {
@@ -251,6 +258,7 @@ struct MessageBubble: View {
     private var messageContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             SidekickMarkdown(message.content ?? "")
+                .id(markdownRenderGeneration)
             if let label = completionLabel {
                 Text(label)
                     .font(.caption2)

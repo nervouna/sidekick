@@ -112,6 +112,9 @@ final class ChatViewModel: ObservableObject {
     /// is summoned. The view model stays out of window management; the
     /// composer observes this counter and makes itself first responder.
     @Published private(set) var composerFocusRequest = 0
+    /// Changes whenever the popover is presented so transient SwiftUI text
+    /// interaction state cannot leak across popover lifetimes.
+    @Published private(set) var markdownRenderGeneration = 0
 
     var onOpenSettings: (() -> Void)?
 
@@ -229,6 +232,7 @@ final class ChatViewModel: ObservableObject {
     }
 
     func refreshForPresentation() {
+        markdownRenderGeneration += 1
         guard !isGenerating else { return }
         if SessionExpiry.isExpired(session, at: dateProvider.now()) {
             newConversation()
