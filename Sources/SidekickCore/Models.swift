@@ -36,6 +36,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
     public var reasoningContent: String?
     public var toolCalls: [ToolCall]?
     public var toolCallID: String?
+    public var attachedContext: String?
     public var completionState: AssistantCompletionState?
     public var createdAt: Date
     public var responseEndedAt: Date?
@@ -48,6 +49,7 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         reasoningContent: String? = nil,
         toolCalls: [ToolCall]? = nil,
         toolCallID: String? = nil,
+        attachedContext: String? = nil,
         completionState: AssistantCompletionState? = nil,
         createdAt: Date = Date(),
         responseEndedAt: Date? = nil,
@@ -59,10 +61,36 @@ public struct ChatMessage: Codable, Equatable, Identifiable, Sendable {
         self.reasoningContent = reasoningContent
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
+        self.attachedContext = attachedContext
         self.completionState = completionState
         self.createdAt = createdAt
         self.responseEndedAt = responseEndedAt
         self.tokenCount = tokenCount
+    }
+}
+
+public enum AttachedContext {
+    public static let truncationMarker = "\n[已截断]"
+
+    public static func clamp(_ text: String) -> (text: String, truncated: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return ("", false) }
+        guard trimmed.count > ContextPolicy.attachedContextCharacterLimit else {
+            return (trimmed, false)
+        }
+        let prefix = String(trimmed.prefix(ContextPolicy.attachedContextCharacterLimit))
+        return (prefix + truncationMarker, true)
+    }
+
+    public static func embed(question: String?, clipboard: String) -> String {
+        let question = question ?? ""
+        return """
+        \(question)
+
+        <attached_context source="clipboard">
+        \(clipboard)
+        </attached_context>
+        """
     }
 }
 

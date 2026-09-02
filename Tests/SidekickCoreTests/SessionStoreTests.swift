@@ -42,4 +42,17 @@ import Testing
     #expect(session.messages.first?.completionState == nil)
     #expect(session.messages.first?.responseEndedAt == nil)
     #expect(session.messages.first?.tokenCount == nil)
+    #expect(session.messages.first?.attachedContext == nil)
+}
+
+@Test func attachedContextRoundTripsThroughSessionEncoding() throws {
+    let message = ChatMessage(role: .user, content: "question", attachedContext: "clip")
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    let data = try encoder.encode(ChatSession(messages: [message]))
+    let decoded = try decoder.decode(ChatSession.self, from: data)
+    #expect(decoded.messages.first?.content == "question")
+    #expect(decoded.messages.first?.attachedContext == "clip")
 }

@@ -6,6 +6,7 @@ public enum ContextPolicy {
     public static let preferredGenerationTokens = 4_096
     public static let minimumFinalGenerationTokens = 512
     public static let userCharacterLimit = 1_000
+    public static let attachedContextCharacterLimit = 4_000
     public static let characterCountDisplayThreshold = 800
     public static let maximumSearchCalls = 2
     public static let searchEvidenceTokenBudget = 2_048
@@ -42,7 +43,7 @@ public struct ContextEstimator: Equatable, Sendable {
 
     public func messageTokens(_ message: ChatMessage) -> Int {
         var total = ContextPolicy.messageOverheadTokens
-        for text in [message.content, message.reasoningContent, message.toolCallID].compactMap({ $0 }) {
+        for text in [message.content, message.reasoningContent, message.toolCallID, message.attachedContext].compactMap({ $0 }) {
             total += textTokens(text)
         }
         for call in message.toolCalls ?? [] {

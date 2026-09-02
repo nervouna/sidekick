@@ -23,6 +23,10 @@ import Testing
     #expect(estimator.messageTokens(message) == ContextPolicy.messageOverheadTokens
         + ContextPolicy.toolCallOverheadTokens + textTotal)
 
+    let withAttachment = ChatMessage(role: .user, content: "q", attachedContext: "clip")
+    #expect(estimator.messageTokens(withAttachment) == ContextPolicy.messageOverheadTokens
+        + ContextEstimator.rawTextTokens("q") + ContextEstimator.rawTextTokens("clip"))
+
     var corrected = ContextEstimator()
     corrected.observe(actualPromptTokens: 110, estimatedPromptTokens: 100)
     #expect(abs(corrected.correctionFactor - 1.21) < 0.0001)
@@ -116,6 +120,26 @@ import Testing
         #expect(prepared.conversationMessages == [current])
         #expect(prepared.evictedMessageIDs.isEmpty)
     }
+}
+
+@Test func attachedContextThatCannotFitInputTargetFailsWithoutMutatingMessages() {
+    let user = ChatMessage(
+        role: .user,
+        content: "q",
+        attachedContext: String(repeating: "中", count: ContextPolicy.attachedContextCharacterLimit)
+    )
+    let messages = [user]
+    let estimator = ContextEstimator()
+    let exact = estimator.promptTokens(systemPrompt: "s", messages: messages)
+    #expect(throws: SidekickError.contextBudgetExceeded) {
+        try ContextManager().prepare(
+            systemPrompt: "s",
+            messages: messages,
+            estimator: estimator,
+            inputTarget: exact - 1
+        )
+    }
+    #expect(messages == [user])
 }
 
 @Test func oversizedCurrentTurnFailsWithoutMutatingInput() {

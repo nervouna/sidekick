@@ -13,6 +13,11 @@ private struct FixedEnvironment: EnvironmentReading {
     func value(for name: String) -> String? { "test-key" }
 }
 
+private final class FakePasteboard: PasteboardReading, @unchecked Sendable {
+    var text: String?
+    func string() -> String? { text }
+}
+
 private struct DeepSeekOnlyEnvironment: EnvironmentReading {
     func value(for name: String) -> String? {
         name == APIService.deepSeek.environmentName ? "test-key" : nil
@@ -61,7 +66,10 @@ private final class MutableDateProvider: DateProviding, @unchecked Sendable {
 }
 
 @MainActor
-private func contextViewModel(store: (any SessionStoring)? = nil) -> ChatViewModel {
+private func contextViewModel(
+    store: (any SessionStoring)? = nil,
+    pasteboard: (any PasteboardReading)? = nil
+) -> ChatViewModel {
     let resolvedStore: any SessionStoring = store ?? SessionStore(
         fileURL: FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -70,8 +78,74 @@ private func contextViewModel(store: (any SessionStoring)? = nil) -> ChatViewMod
     return ChatViewModel(
         sessionStore: resolvedStore,
         keyProvider: KeyProvider(secrets: EmptySecrets(), environment: FixedEnvironment()),
-        agent: AgentRunner(deepSeek: ImmediateDeepSeek(), tavily: NeverUsedTavily())
+        agent: AgentRunner(deepSeek: ImmediateDeepSeek(), tavily: NeverUsedTavily()),
+        pasteboard: pasteboard ?? FakePasteboard()
     )
+}
+
+@Test func attachedContextClampTruncatesAtFourThousandCharacters() {
+    #expect(AttachedContext.clamp("   ").text.isEmpty)
+    let exact = String(repeating: "a", count: ContextPolicy.attachedContextCharacterLimit)
+    #expect(AttachedContext.clamp(exact) == (exact, false))
+    let oversized = exact + "z"
+    let clamped = AttachedContext.clamp(oversized)
+    #expect(clamped.truncated)
+    #expect(clamped.text.hasPrefix(exact))
+    #expect(clamped.text.hasSuffix("[已截断]"))
+    #expect(!clamped.text.contains("z"))
+}
+
+@Test @MainActor
+func clipboardAttachSendAndRetryKeepStructuredContext() async throws {
+    let pasteboard = FakePasteboard()
+    pasteboard.text = "  clipboard body  "
+    let viewModel = contextViewModel(pasteboard: pasteboard)
+    viewModel.attachClipboardContext()
+    #expect(viewModel.attachedContext == "clipboard body")
+
+    viewModel.input = String(repeating: "q", count: 1_000)
+    #expect(viewModel.canSend)
+    viewModel.send()
+    while viewModel.isGenerating { await Task.yield() }
+
+    #expect(viewModel.attachedContext == nil)
+    #expect(viewModel.session.messages.first?.content == String(repeating: "q", count: 1_000))
+    #expect(viewModel.session.messages.first?.attachedContext == "clipboard body")
+    #expect(viewModel.conversationItems.contains { item in
+        if case .message(_, let message) = item {
+            return message.attachedContext == "clipboard body" && message.content == String(repeating: "q", count: 1_000)
+        }
+        return false
+    })
+
+    let userID = viewModel.session.messages.first?.id
+    let replyID = viewModel.session.messages.last?.id
+    viewModel.regenerate(replyID: try #require(replyID))
+    while viewModel.isGenerating { await Task.yield() }
+    #expect(viewModel.session.messages.first?.id == userID)
+    #expect(viewModel.session.messages.first?.attachedContext == "clipboard body")
+}
+
+@Test @MainActor
+func clipboardChipClearsOnDismissAndNewConversation() {
+    let pasteboard = FakePasteboard()
+    pasteboard.text = "keep"
+    let viewModel = contextViewModel(pasteboard: pasteboard)
+    viewModel.attachClipboardContext()
+    viewModel.clearAttachedContext()
+    #expect(viewModel.attachedContext == nil)
+
+    pasteboard.text = "again"
+    viewModel.attachClipboardContext()
+    viewModel.newConversation()
+    #expect(viewModel.attachedContext == nil)
+}
+
+@Test @MainActor
+func emptyPasteboardDoesNotAttach() {
+    let viewModel = contextViewModel()
+    viewModel.attachClipboardContext()
+    #expect(viewModel.attachedContext == nil)
 }
 
 @Test @MainActor

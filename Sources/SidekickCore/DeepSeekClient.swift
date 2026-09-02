@@ -161,7 +161,11 @@ struct APIMessage: Encodable {
 
     init(_ message: ChatMessage) {
         role = message.role.rawValue
-        content = message.content
+        if message.role == .user, let attached = message.attachedContext, !attached.isEmpty {
+            content = AttachedContext.embed(question: message.content, clipboard: attached)
+        } else {
+            content = message.content
+        }
         reasoningContent = message.reasoningContent
         toolCalls = message.toolCalls
         toolCallID = message.toolCallID

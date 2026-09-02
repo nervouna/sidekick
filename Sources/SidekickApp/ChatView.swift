@@ -140,10 +140,26 @@ struct ChatView: View {
                         .allowsHitTesting(false)
                 }
             }
+            if let attached = viewModel.attachedContext {
+                HStack(spacing: 6) {
+                    Label("已附带剪贴板文本，\(attached.count) 字", systemImage: "doc.on.clipboard")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("移除", action: viewModel.clearAttachedContext)
+                        .buttonStyle(.link)
+                        .font(.caption)
+                }
+            }
             HStack {
                 Text("↩ 发送  ·  ⇧↩ 换行")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                Button("使用剪贴板", action: viewModel.attachClipboardContext)
+                    .buttonStyle(.link)
+                    .font(.caption)
+                    .disabled(viewModel.isGenerating)
                 Spacer()
                 if viewModel.showsInputCharacterCount {
                     Text("\(viewModel.inputCharacterCount) / \(ContextPolicy.userCharacterLimit)")
@@ -270,6 +286,11 @@ struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             SidekickMarkdown(message.content ?? "")
                 .id(markdownRenderGeneration)
+            if message.role == .user, let attached = message.attachedContext, !attached.isEmpty {
+                Text("已附带剪贴板文本，\(attached.count) 字")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             if message.role == .assistant && showsResponseMetadata {
                 ResponseMetadataRow(
                     endedAt: message.responseEndedAt ?? message.createdAt,

@@ -33,6 +33,25 @@ import Testing
     #expect(messages.first?["content"] as? String == "current system")
 }
 
+@Test func userAttachedContextIsEmbeddedOnlyInOutgoingAPIContent() throws {
+    let request = ModelRequest(
+        systemPrompt: "system",
+        conversationMessages: [
+            ChatMessage(role: .user, content: "总结这段", attachedContext: "clipboard body")
+        ],
+        maxTokens: 512
+    )
+    let data = try JSONEncoder().encode(DeepSeekRequestBody(request: request))
+    let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let messages = try #require(root["messages"] as? [[String: Any]])
+    let user = try #require(messages.last)
+    let content = try #require(user["content"] as? String)
+    #expect(content.contains("总结这段"))
+    #expect(content.contains("<attached_context source=\"clipboard\">"))
+    #expect(content.contains("clipboard body"))
+    #expect(!content.contains("attachedContext"))
+}
+
 @Test func usageOnlyChunkAndDoneAreParsedWithoutDuplicateCompletion() throws {
     let payload = #"{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":20,"completion_tokens_details":{"reasoning_tokens":12}}}"#
     #expect(try DeepSeekClient.events(for: payload) == [

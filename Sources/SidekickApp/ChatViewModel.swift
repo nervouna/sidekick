@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import SidekickCore
@@ -99,10 +100,21 @@ enum ConversationItem: Identifiable, Equatable {
     }
 }
 
+protocol PasteboardReading: Sendable {
+    func string() -> String?
+}
+
+struct AppKitPasteboard: PasteboardReading {
+    func string() -> String? {
+        NSPasteboard.general.string(forType: .string)
+    }
+}
+
 @MainActor
 final class ChatViewModel: ObservableObject {
     @Published var session: ChatSession
     @Published var input = ""
+    @Published private(set) var attachedContext: String?
     @Published var streamingContent = ""
     @Published var activities: [ActivityItem] = []
     @Published var errorMessage: String?
@@ -123,6 +135,7 @@ final class ChatViewModel: ObservableObject {
     private let agent: AgentRunner
     private let dateProvider: any DateProviding
     private let contextManager: ContextManager
+    private let pasteboard: any PasteboardReading
     private var estimator = ContextEstimator()
     private var generationTask: Task<Void, Never>?
     private var generationID = UUID()
@@ -142,13 +155,15 @@ final class ChatViewModel: ObservableObject {
         keyProvider: KeyProvider = KeyProvider(),
         agent: AgentRunner = AgentRunner(),
         dateProvider: any DateProviding = SystemDateProvider(),
-        contextManager: ContextManager = ContextManager()
+        contextManager: ContextManager = ContextManager(),
+        pasteboard: any PasteboardReading = AppKitPasteboard()
     ) {
         self.sessionStore = sessionStore
         self.keyProvider = keyProvider
         self.agent = agent
         self.dateProvider = dateProvider
         self.contextManager = contextManager
+        self.pasteboard = pasteboard
         do {
             session = try sessionStore.load(now: dateProvider.now())
         } catch {
@@ -228,6 +243,16 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
+    func attachClipboardContext() {
+        let clamped = AttachedContext.clamp(pasteboard.string() ?? "")
+        guard !clamped.text.isEmpty else { return }
+        attachedContext = clamped.text
+    }
+
+    func clearAttachedContext() {
+        attachedContext = nil
+    }
+
     func requestComposerFocus() {
         composerFocusRequest += 1
     }
@@ -262,7 +287,12 @@ final class ChatViewModel: ObservableObject {
 
         let now = dateProvider.now()
         var candidate = session
-        let user = ChatMessage(role: .user, content: text, createdAt: now)
+        let user = ChatMessage(
+            role: .user,
+            content: text,
+            attachedContext: attachedContext,
+            createdAt: now
+        )
         candidate.append(user, now: now)
         do {
             let prepared = try prepare(candidate.messages, at: now)
@@ -271,6 +301,7 @@ final class ChatViewModel: ObservableObject {
             session = candidate
             showsContextTrimNotice = showsContextTrimNotice || !prepared.evictedMessageIDs.isEmpty
             input = ""
+            clearAttachedContext()
             errorMessage = nil
             activeUserMessageID = user.id
             startGeneration(prepared: prepared)
@@ -353,6 +384,7 @@ final class ChatViewModel: ObservableObject {
         input = ""
         estimator = ContextEstimator()
         showsContextTrimNotice = false
+        clearAttachedContext()
         activeUserMessageID = nil
         activeTokenCount = 0
         session = ChatSession(createdAt: dateProvider.now())
