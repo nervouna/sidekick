@@ -159,7 +159,7 @@ public struct AgentRunner: Sendable {
                             else {
                                 messages.append(toolError(
                                     callID: call.id,
-                                    code: "search_budget_exhausted",
+                                    code: "invalid_search_request",
                                     message: "The search request was invalid and could not be executed."
                                 ))
                                 forceFinal = true
@@ -186,11 +186,24 @@ public struct AgentRunner: Sendable {
 
                             continuation.yield(.toolCallStarted)
                             searchCalls += 1
-                            let results = try await tavily.search(query: arguments.query, apiKey: tavilyKey)
-                            let evidence = try SearchEvidenceBuilder.encode(results, estimator: estimator)
-                            messages.append(ChatMessage(role: .tool, content: evidence, toolCallID: call.id))
-                            continuation.yield(.toolCallCompleted)
-                            if searchCalls >= ContextPolicy.maximumSearchCalls { forceFinal = true }
+                            do {
+                                let results = try await tavily.search(query: arguments.query, apiKey: tavilyKey)
+                                let evidence = try SearchEvidenceBuilder.encode(results, estimator: estimator)
+                                messages.append(ChatMessage(role: .tool, content: evidence, toolCallID: call.id))
+                                continuation.yield(.toolCallCompleted)
+                                if searchCalls >= ContextPolicy.maximumSearchCalls { forceFinal = true }
+                            } catch {
+                                if Self.isCancellation(error) {
+                                    throw SidekickError.cancelled
+                                }
+                                messages.append(toolError(
+                                    callID: call.id,
+                                    code: "search_failed",
+                                    message: "The web search failed and could not be completed. Answer from existing evidence and disclose that it may be incomplete."
+                                ))
+                                continuation.yield(.toolCallCompleted)
+                                forceFinal = true
+                            }
                         }
 
                         do {
@@ -220,6 +233,8 @@ public struct AgentRunner: Sendable {
                     }
                 } catch is CancellationError {
                     continuation.finish(throwing: SidekickError.cancelled)
+                } catch let error as SidekickError where error == .cancelled {
+                    continuation.finish(throwing: error)
                 } catch {
                     if !partialContent.isEmpty {
                         messages.append(ChatMessage(
@@ -245,6 +260,14 @@ public struct AgentRunner: Sendable {
         case .contentFilter: .filtered
         case .insufficientSystemResource, .toolCalls: .interrupted
         }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if Task.isCancelled { return true }
+        if error is CancellationError { return true }
+        if error as? SidekickError == .cancelled { return true }
+        if (error as? URLError)?.code == .cancelled { return true }
+        return false
     }
 
     private func toolError(callID: String, code: String, message: String) -> ChatMessage {

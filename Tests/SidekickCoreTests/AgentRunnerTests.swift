@@ -185,3 +185,123 @@ private actor CountingTavily: TavilySearching {
     #expect(tool?.content?.contains("search_budget_exhausted") == true)
     #expect(deepSeek.receivedRequests.last?.options.toolChoice == ToolChoice.none)
 }
+
+private struct ThrowingTavily: TavilySearching {
+    func search(query: String, apiKey: String) async throws -> [TavilyResult] {
+        throw SidekickError.http(status: 503, message: "unavailable")
+    }
+}
+
+@Test func tavilyFailureReturnsSearchFailedAndStillFinishes() async throws {
+    let deepSeek = SequencedDeepSeek([
+        [
+            .toolCallDelta(
+                index: 0,
+                id: "call-1",
+                name: "web_search",
+                arguments: #"{"query":"latest news"}"#
+            ),
+            .finished(.toolCalls)
+        ],
+        [.contentDelta("Final with incomplete evidence"), .finished(.stop)]
+    ])
+    let runner = AgentRunner(deepSeek: deepSeek, tavily: ThrowingTavily())
+    var events: [AgentEvent] = []
+    var finalMessages: [ChatMessage] = []
+    for try await event in runner.run(
+        messages: [ChatMessage(role: .user, content: "question")],
+        deepSeekKey: "d",
+        tavilyKey: "t"
+    ) {
+        events.append(event)
+        if case .finished(let messages) = event { finalMessages = messages }
+    }
+
+    #expect(events.contains(.toolCallStarted))
+    #expect(events.contains(.toolCallCompleted))
+    let tool = finalMessages.first { $0.role == .tool }
+    #expect(tool?.toolCallID == "call-1")
+    #expect(tool?.content?.contains("search_failed") == true)
+    #expect(finalMessages.last?.content == "Final with incomplete evidence")
+    #expect(deepSeek.receivedRequests.count == 2)
+    #expect(deepSeek.receivedRequests[1].options.toolChoice == .none)
+}
+
+@Test func invalidToolCallReturnsInvalidSearchRequestWithoutCallingTavily() async throws {
+    let deepSeek = SequencedDeepSeek([
+        [
+            .toolCallDelta(
+                index: 0,
+                id: "bad-call",
+                name: "web_search",
+                arguments: #"{"query":"   "}"#
+            ),
+            .finished(.toolCalls)
+        ],
+        [.contentDelta("Final"), .finished(.stop)]
+    ])
+    let tavily = CountingTavily()
+    let runner = AgentRunner(deepSeek: deepSeek, tavily: tavily)
+    var finalMessages: [ChatMessage] = []
+    for try await event in runner.run(
+        messages: [ChatMessage(role: .user, content: "question")],
+        deepSeekKey: "d",
+        tavilyKey: "t"
+    ) {
+        if case .finished(let messages) = event { finalMessages = messages }
+    }
+
+    let queries = await tavily.queries
+    #expect(queries.isEmpty)
+    let tool = finalMessages.first { $0.role == .tool }
+    #expect(tool?.toolCallID == "bad-call")
+    #expect(tool?.content?.contains("invalid_search_request") == true)
+    #expect(deepSeek.receivedRequests.last?.options.toolChoice == ToolChoice.none)
+}
+
+private struct URLCancelledTavily: TavilySearching {
+    func search(query: String, apiKey: String) async throws -> [TavilyResult] {
+        throw URLError(.cancelled)
+    }
+}
+
+@Test func tavilyURLCancellationDoesNotBecomeSearchFailed() async {
+    let deepSeek = SequencedDeepSeek([
+        [
+            .toolCallDelta(
+                index: 0,
+                id: "call-1",
+                name: "web_search",
+                arguments: #"{"query":"latest news"}"#
+            ),
+            .finished(.toolCalls)
+        ],
+        [.contentDelta("Should not run"), .finished(.stop)]
+    ])
+    let runner = AgentRunner(deepSeek: deepSeek, tavily: URLCancelledTavily())
+    var events: [AgentEvent] = []
+    do {
+        for try await event in runner.run(
+            messages: [ChatMessage(role: .user, content: "question")],
+            deepSeekKey: "d",
+            tavilyKey: "t"
+        ) {
+            events.append(event)
+        }
+        Issue.record("cancelled search should throw")
+    } catch {
+        #expect(error as? SidekickError == .cancelled)
+    }
+
+    #expect(events.contains(.toolCallStarted))
+    #expect(!events.contains(.toolCallCompleted))
+    #expect(!events.contains { event in
+        if case .failed = event { return true }
+        return false
+    })
+    #expect(!events.contains { event in
+        if case .finished = event { return true }
+        return false
+    })
+    #expect(deepSeek.receivedRequests.count == 1)
+}

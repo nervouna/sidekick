@@ -399,7 +399,6 @@ final class ChatViewModel: ObservableObject {
         }
         finishStreamingLayout()
         streamingContent = ""
-        if errorMessage == nil { errorMessage = "请求已取消" }
     }
 
     func updateLayoutHeights(contentHeight: CGFloat, chromeHeight: CGFloat, now: Date? = nil) {

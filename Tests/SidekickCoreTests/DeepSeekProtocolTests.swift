@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import SidekickCore
 
+@Test func httpSessionsUseBoundedTimeouts() {
+    let configuration = SidekickHTTP.configuration()
+    #expect(configuration.timeoutIntervalForRequest == SidekickHTTP.requestTimeout)
+    #expect(configuration.timeoutIntervalForResource == SidekickHTTP.resourceTimeout)
+    #expect(SidekickHTTP.requestTimeout == 30)
+    #expect(SidekickHTTP.resourceTimeout == 120)
+}
+
 @Test func requestEncodesBudgetToolChoiceAndUsageStreamOption() throws {
     let request = ModelRequest(
         systemPrompt: "current system",

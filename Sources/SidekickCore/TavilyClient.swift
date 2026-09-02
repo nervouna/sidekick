@@ -10,7 +10,7 @@ public struct TavilyClient: TavilySearching, Sendable {
     private let session: URLSession
     private let endpoint: URL
 
-    public init(session: URLSession = .shared, endpoint: URL = Self.endpoint) {
+    public init(session: URLSession = SidekickHTTP.makeSession(), endpoint: URL = Self.endpoint) {
         self.session = session
         self.endpoint = endpoint
     }

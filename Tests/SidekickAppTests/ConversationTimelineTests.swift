@@ -186,6 +186,7 @@ func cancelledPartialReplyIsCommittedBelowActivities() {
     ])
     #expect(viewModel.session.messages.last?.content == "Partial")
     #expect(viewModel.session.messages.last?.completionState == .cancelled)
+    #expect(viewModel.errorMessage == nil)
 }
 
 @Test @MainActor
