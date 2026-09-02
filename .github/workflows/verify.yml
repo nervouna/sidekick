@@ -1,0 +1,17 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run unit tests
+        run: swift test --package-path .
+      - name: Check release script dry run
+        run: ./scripts/test_release_app.sh
