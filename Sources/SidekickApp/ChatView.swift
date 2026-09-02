@@ -112,7 +112,7 @@ struct ChatView: View {
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
             Text("有什么可以帮你？").font(.headline)
-            Text("需要最新信息时，我会自动搜索网页。")
+            Text("需要最新信息时可在设置中填写 Tavily，以便自动搜索网页。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

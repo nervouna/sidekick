@@ -259,6 +259,40 @@ private struct ThrowingTavily: TavilySearching {
     #expect(deepSeek.receivedRequests.last?.options.toolChoice == ToolChoice.none)
 }
 
+@Test func missingTavilyKeyReturnsSearchUnavailableWithoutCallingTavily() async throws {
+    let deepSeek = SequencedDeepSeek([
+        [
+            .toolCallDelta(
+                index: 0,
+                id: "call-1",
+                name: "web_search",
+                arguments: #"{"query":"latest news"}"#
+            ),
+            .finished(.toolCalls)
+        ],
+        [.contentDelta("Final without search"), .finished(.stop)]
+    ])
+    let tavily = CountingTavily()
+    let runner = AgentRunner(deepSeek: deepSeek, tavily: tavily)
+    var finalMessages: [ChatMessage] = []
+    for try await event in runner.run(
+        messages: [ChatMessage(role: .user, content: "question")],
+        deepSeekKey: "d",
+        tavilyKey: nil
+    ) {
+        if case .finished(let messages) = event { finalMessages = messages }
+    }
+
+    let queries = await tavily.queries
+    #expect(queries.isEmpty)
+    let tool = finalMessages.first { $0.role == .tool }
+    #expect(tool?.toolCallID == "call-1")
+    #expect(tool?.content?.contains("search_unavailable") == true)
+    #expect(finalMessages.last?.content == "Final without search")
+    #expect(deepSeek.receivedRequests.count == 2)
+    #expect(deepSeek.receivedRequests[1].options.toolChoice == ToolChoice.none)
+}
+
 private struct URLCancelledTavily: TavilySearching {
     func search(query: String, apiKey: String) async throws -> [TavilyResult] {
         throw URLError(.cancelled)

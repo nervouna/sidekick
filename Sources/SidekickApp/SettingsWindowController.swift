@@ -133,10 +133,13 @@ final class SettingsViewModel: ObservableObject {
         Task {
             do {
                 guard let deepSeek = try keyProvider.key(for: .deepSeek) else { throw SidekickError.missingKey("DeepSeek") }
-                guard let tavily = try keyProvider.key(for: .tavily) else { throw SidekickError.missingKey("Tavily") }
                 try await validator.validate(deepSeek, for: .deepSeek)
-                try await validator.validate(tavily, for: .tavily)
-                status = "DeepSeek 与 Tavily 均连接成功"
+                if let tavily = try keyProvider.key(for: .tavily) {
+                    try await validator.validate(tavily, for: .tavily)
+                    status = "DeepSeek 与 Tavily 均连接成功"
+                } else {
+                    status = "DeepSeek 连接成功。未填写 Tavily，网页搜索不可用。"
+                }
             } catch { status = error.localizedDescription }
             isValidating = false
         }
@@ -150,7 +153,12 @@ private struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("API Keys").font(.title2.bold())
             keyField("DeepSeek", text: $viewModel.deepSeekKey, environment: viewModel.deepSeekFromEnvironment)
-            keyField("Tavily", text: $viewModel.tavilyKey, environment: viewModel.tavilyFromEnvironment)
+            keyField(
+                "Tavily",
+                text: $viewModel.tavilyKey,
+                environment: viewModel.tavilyFromEnvironment,
+                caption: "可选；不填则无法搜索网页"
+            )
             if !viewModel.status.isEmpty {
                 Text(viewModel.status).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
@@ -185,7 +193,12 @@ private struct SettingsView: View {
         }
     }
 
-    private func keyField(_ title: String, text: Binding<String>, environment: Bool) -> some View {
+    private func keyField(
+        _ title: String,
+        text: Binding<String>,
+        environment: Bool,
+        caption: String? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(title).font(.headline)
@@ -193,6 +206,11 @@ private struct SettingsView: View {
             }
             SecureField("输入 \(title) API Key", text: text)
                 .textFieldStyle(.roundedBorder)
+            if let caption {
+                Text(caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

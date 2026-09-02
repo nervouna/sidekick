@@ -13,6 +13,12 @@ private struct FixedEnvironment: EnvironmentReading {
     func value(for name: String) -> String? { "test-key" }
 }
 
+private struct DeepSeekOnlyEnvironment: EnvironmentReading {
+    func value(for name: String) -> String? {
+        name == APIService.deepSeek.environmentName ? "test-key" : nil
+    }
+}
+
 private struct ImmediateDeepSeek: DeepSeekStreaming {
     func stream(request: ModelRequest, apiKey: String) -> AsyncThrowingStream<ModelStreamEvent, Error> {
         AsyncThrowingStream { continuation in
@@ -66,6 +72,25 @@ private func contextViewModel(store: (any SessionStoring)? = nil) -> ChatViewMod
         keyProvider: KeyProvider(secrets: EmptySecrets(), environment: FixedEnvironment()),
         agent: AgentRunner(deepSeek: ImmediateDeepSeek(), tavily: NeverUsedTavily())
     )
+}
+
+@Test @MainActor
+func sendSucceedsWithOnlyADeepSeekKey() async {
+    let fileURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathComponent("session.json")
+    let viewModel = ChatViewModel(
+        sessionStore: SessionStore(fileURL: fileURL),
+        keyProvider: KeyProvider(secrets: EmptySecrets(), environment: DeepSeekOnlyEnvironment()),
+        agent: AgentRunner(deepSeek: ImmediateDeepSeek(), tavily: NeverUsedTavily())
+    )
+    viewModel.input = "hello"
+    viewModel.send()
+    while viewModel.isGenerating { await Task.yield() }
+
+    #expect(viewModel.session.messages.contains { $0.role == .user && $0.content == "hello" })
+    #expect(viewModel.session.messages.last?.content == "answer")
+    #expect(viewModel.errorMessage == nil)
 }
 
 @Test @MainActor

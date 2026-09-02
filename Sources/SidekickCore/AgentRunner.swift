@@ -18,10 +18,12 @@ public struct AgentRunner: Sendable {
     public func run(
         messages: [ChatMessage],
         deepSeekKey: String,
-        tavilyKey: String
+        tavilyKey: String?
     ) -> AsyncThrowingStream<AgentEvent, Error> {
         do {
-            let prompt = SidekickSystemPrompt.render(context: .current())
+            let prompt = SidekickSystemPrompt.render(
+                context: .current(searchAvailable: Self.hasSearchKey(tavilyKey))
+            )
             let prepared = try contextManager.prepare(
                 systemPrompt: prompt,
                 messages: messages,
@@ -37,7 +39,7 @@ public struct AgentRunner: Sendable {
         prepared initialPrepared: PreparedConversation,
         correctionFactor: Double = 1.0,
         deepSeekKey: String,
-        tavilyKey: String
+        tavilyKey: String?
     ) -> AsyncThrowingStream<AgentEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -146,6 +148,15 @@ public struct AgentRunner: Sendable {
                                     callID: call.id,
                                     code: "search_limit_reached",
                                     message: "This question has reached the two-search limit. Answer from existing evidence and disclose that it may be incomplete."
+                                ))
+                                forceFinal = true
+                                continue
+                            }
+                            guard let tavilyKey, Self.hasSearchKey(tavilyKey) else {
+                                messages.append(toolError(
+                                    callID: call.id,
+                                    code: "search_unavailable",
+                                    message: "Web search is not configured. Answer from stable knowledge and disclose that current facts could not be verified."
                                 ))
                                 forceFinal = true
                                 continue
@@ -260,6 +271,11 @@ public struct AgentRunner: Sendable {
         case .contentFilter: .filtered
         case .insufficientSystemResource, .toolCalls: .interrupted
         }
+    }
+
+    private static func hasSearchKey(_ key: String?) -> Bool {
+        guard let key else { return false }
+        return !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private static func isCancellation(_ error: Error) -> Bool {

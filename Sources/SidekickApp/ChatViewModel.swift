@@ -255,11 +255,6 @@ final class ChatViewModel: ObservableObject {
                 onOpenSettings?()
                 return
             }
-            guard try keyProvider.key(for: .tavily) != nil else {
-                errorMessage = SidekickError.missingKey("Tavily").localizedDescription
-                onOpenSettings?()
-                return
-            }
         } catch {
             errorMessage = error.localizedDescription
             return
@@ -320,11 +315,6 @@ final class ChatViewModel: ObservableObject {
         do {
             guard try keyProvider.key(for: .deepSeek) != nil else {
                 errorMessage = SidekickError.missingKey("DeepSeek").localizedDescription
-                onOpenSettings?()
-                return
-            }
-            guard try keyProvider.key(for: .tavily) != nil else {
-                errorMessage = SidekickError.missingKey("Tavily").localizedDescription
                 onOpenSettings?()
                 return
             }
@@ -433,12 +423,11 @@ final class ChatViewModel: ObservableObject {
 
     private func startGeneration(prepared: PreparedConversation) {
         let deepSeekKey: String
-        let tavilyKey: String
+        let tavilyKey: String?
         do {
             guard let deepSeek = try keyProvider.key(for: .deepSeek) else { throw SidekickError.missingKey("DeepSeek") }
-            guard let tavily = try keyProvider.key(for: .tavily) else { throw SidekickError.missingKey("Tavily") }
             deepSeekKey = deepSeek
-            tavilyKey = tavily
+            tavilyKey = try keyProvider.key(for: .tavily)
         } catch {
             errorMessage = error.localizedDescription
             onOpenSettings?()
@@ -570,10 +559,12 @@ final class ChatViewModel: ObservableObject {
     }
 
     private func prepare(_ messages: [ChatMessage], at date: Date) throws -> PreparedConversation {
+        let searchAvailable = (try? keyProvider.key(for: .tavily))?.isEmpty == false
         let prompt = SidekickSystemPrompt.render(context: SystemPromptContext(
             date: date,
             timeZone: .current,
-            locale: .current
+            locale: .current,
+            searchAvailable: searchAvailable
         ))
         return try contextManager.prepare(
             systemPrompt: prompt,
