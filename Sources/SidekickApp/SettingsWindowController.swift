@@ -8,16 +8,20 @@ final class SettingsWindowController: NSWindowController {
         keyProvider: KeyProvider,
         hotKeyStore: any HotKeyStoring,
         initialHotKeyStatus: String,
-        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void
+        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void,
+        loginItem: any LoginItemControlling = SMAppServiceLoginItemController(),
+        appVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     ) {
         let viewModel = SettingsViewModel(
             keyProvider: keyProvider,
             hotKeyStore: hotKeyStore,
             initialHotKeyStatus: initialHotKeyStatus,
-            onRebindHotKey: onRebindHotKey
+            onRebindHotKey: onRebindHotKey,
+            loginItem: loginItem,
+            appVersion: appVersion
         )
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 430, height: 480),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -49,26 +53,44 @@ final class SettingsViewModel: ObservableObject {
     @Published var tavilyFromEnvironment = false
     @Published private(set) var hotKey: HotKeyBinding
     @Published private(set) var hotKeyStatus: String
+    @Published private(set) var launchAtLogin: Bool
+    let appVersion: String
 
     private let keyProvider: KeyProvider
     private let validator: CredentialValidator
     private let hotKeyStore: any HotKeyStoring
     private let onRebindHotKey: (HotKeyBinding) throws -> Void
+    private let loginItem: any LoginItemControlling
 
     init(
         keyProvider: KeyProvider,
         validator: CredentialValidator = CredentialValidator(),
         hotKeyStore: any HotKeyStoring,
         initialHotKeyStatus: String,
-        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void
+        onRebindHotKey: @escaping (HotKeyBinding) throws -> Void,
+        loginItem: any LoginItemControlling,
+        appVersion: String
     ) {
         self.keyProvider = keyProvider
         self.validator = validator
         self.hotKeyStore = hotKeyStore
         self.onRebindHotKey = onRebindHotKey
+        self.loginItem = loginItem
+        self.appVersion = appVersion
         hotKey = hotKeyStore.load()
         hotKeyStatus = initialHotKeyStatus
+        launchAtLogin = loginItem.isEnabled
         reload()
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        do {
+            try loginItem.setEnabled(enabled)
+            launchAtLogin = loginItem.isEnabled
+        } catch {
+            launchAtLogin = loginItem.isEnabled
+            status = error.localizedDescription
+        }
     }
 
     func applyHotKey(_ binding: HotKeyBinding) {
@@ -164,7 +186,21 @@ private struct SettingsView: View {
             }
             Divider()
             hotKeySection
+            Divider()
+            Toggle("登录时打开", isOn: Binding(
+                get: { viewModel.launchAtLogin },
+                set: { viewModel.setLaunchAtLogin($0) }
+            ))
+            Text("当前对话 30 分钟内有效，关闭后不会长期保存。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer()
+            HStack {
+                Text("版本 \(viewModel.appVersion)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
             HStack {
                 Button("删除密钥", role: .destructive, action: viewModel.deleteKeys)
                 Spacer()
@@ -173,7 +209,7 @@ private struct SettingsView: View {
             }
         }
         .padding(22)
-        .frame(width: 430, height: 400)
+        .frame(width: 430, height: 480)
     }
 
     private var hotKeySection: some View {
