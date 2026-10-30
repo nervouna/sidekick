@@ -11,7 +11,6 @@
 
 Sidekick 是一个原生 macOS 菜单栏 AI 对话 App。它使用 DeepSeek V4 Flash 流式回答，并在需要最新信息时通过 Tavily 自动搜索网页。
 
-<!-- screenshots -->
 
 ## 状态
 

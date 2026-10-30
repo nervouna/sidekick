@@ -11,7 +11,6 @@ English | [简体中文](README.zh-CN.md)
 
 Sidekick is a native macOS menu bar app for AI chat. It streams answers from DeepSeek V4 Flash and searches the web with Tavily when a question needs current information.
 
-<!-- screenshots -->
 
 ## Status
 
