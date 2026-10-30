@@ -1,70 +1,113 @@
 # Sidekick
 
-Sidekick 是一个原生 macOS 菜单栏 AI 对话 App。它使用 DeepSeek V4 Flash 流式回答，并在需要最新信息时通过 Tavily 自动搜索网页。
+English | [简体中文](README.zh-CN.md)
 
-## 下载
+[![Verify](https://github.com/nervouna/sidekick/actions/workflows/verify.yml/badge.svg)](https://github.com/nervouna/sidekick/actions/workflows/verify.yml)
+[![Release](https://img.shields.io/github/v/release/nervouna/sidekick)](https://github.com/nervouna/sidekick/releases/latest)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-lightgrey)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-[下载最新 macOS 版本](https://github.com/nervouna/sidekick/releases/latest/download/Sidekick-macOS-arm64.zip)
+![Sidekick](docs/images/banner.jpg)
 
-公开下载包适用于 Apple Silicon Mac，已使用 Developer ID Application 签名并通过 Apple 公证。安装后请在设置中填写 DeepSeek 与 Tavily API Key。
+Sidekick is a native macOS menu bar app for AI chat. It streams answers from DeepSeek V4 Flash and searches the web with Tavily when a question needs current information.
 
-## 要求
 
-- macOS 14 或更高版本
-- Xcode 16 / Swift 6 或更高版本
-- DeepSeek 与 Tavily API Key
+## Status
 
-## 本地调试
+Sidekick is a personal project at version 0.1. It needs an Apple silicon Mac with macOS 14 or later, and your own DeepSeek and Tavily API keys; DeepSeek bills you for the tokens and Tavily for the searches. The interface is in Simplified Chinese; Sidekick answers in the language of your question. Releases on GitHub are signed with a Developer ID and notarized by Apple; the latest is v0.1.0.
 
-项目根目录的 `.env` 使用以下变量名：
+## How it is built
+
+Most of the code is written by coding agents. `AGENTS.md` holds the rules they follow: confirmed work is committed and pushed straight to `main` without pull request review, any build handed to a person for testing is signed with a Developer ID (never ad hoc), and public releases are notarized through the release workflow in `.agents/skills/release-sidekick-macos`. CI runs the unit tests and a dry run of the release script on every push to `main`. See [CONTRIBUTING.md](CONTRIBUTING.md) to report a bug or send a fix, and [SECURITY.md](SECURITY.md) for security problems.
+
+## Download
+
+[Download the latest macOS build](https://github.com/nervouna/sidekick/releases/latest/download/Sidekick-macOS-arm64.zip)
+
+The download is for Apple silicon Macs. Unzip it, move `Sidekick.app` to `/Applications` and open it. Then enter your DeepSeek and Tavily API keys in its settings.
+
+## Usage
+
+- Click the sparkle icon in the menu bar to open the chat, or press the global shortcut `⌥Space` to open and close it from anywhere. The cursor is already in the input field when it opens.
+- `Esc` closes the popover. While an input method is active, the first `Esc` closes its candidate window.
+- To change the shortcut, click the shortcut field in Settings and press the new combination; `Delete` restores the default. A shortcut must include `⌃`, `⌥` or `⌘`; function keys work on their own.
+- If the shortcut does nothing, another app probably uses it. Pick a different combination.
+- `Return` sends, `Shift+Return` adds a line break.
+- A message can be up to 1,000 characters. Longer text stays in the field for editing but cannot be sent.
+- 使用剪贴板 (Use clipboard) attaches the text on the clipboard to the next question, up to 4,000 characters. 移除 (Remove) takes it off again.
+- Your messages, the replies and streaming text are rendered as Markdown.
+- Right-click the menu bar icon for 设置… (Settings…) and 退出 Sidekick (Quit Sidekick).
+- The current conversation is temporary context that lasts 30 minutes. It is cleared the next time you open the popover or send a message after that.
+- To limit cost, latency and what is sent, older complete exchanges may be dropped from the context. The interface says so, and they are removed from the temporary session file as well.
+- Answers that were cancelled, hit the length limit, were filtered or broke off are still shown but are left out of later context. 重试 (Retry) replaces such an answer.
+- Sidekick has no long-term memory, history search or recall across conversations.
+
+## Keys, data and network
+
+- **API keys** entered in Settings are stored in the macOS Keychain (service `io.damao.sidekick`, accounts `deepseek` and `tavily`). A key in the Keychain takes precedence over the `DEEPSEEK_API_KEY` and `TAVILY_API_KEY` environment variables. 删除密钥 (Delete keys) in Settings removes them from the Keychain.
+- **DeepSeek** (`api.deepseek.com`) receives each question with the current conversation, any attached clipboard text, the search results for that question, and a system prompt that includes your local date and time, time zone and locale.
+- **Tavily** (`api.tavily.com`) receives the search queries the model writes, at most two per question. Your messages are not sent to Tavily as such.
+- 验证连接 (Verify connection) in Settings sends each key to its own service to check it.
+- **On disk**: the current conversation is kept in `~/Library/Application Support/Sidekick/current-session.json` for its 30 minutes; the shortcut is in the app's user defaults (`io.damao.sidekick`).
+- The clipboard is read only when you click 使用剪贴板 (Use clipboard).
+- Images in replies are shown as placeholders, not loaded from the network.
+- Sidekick sends nothing else and has no analytics.
+
+## Uninstall
+
+1. In Settings, turn off 登录时打开 (Open at login) and click 删除密钥 (Delete keys).
+2. Right-click the menu bar icon, choose 退出 Sidekick (Quit Sidekick), and move `Sidekick.app` to the Trash.
+3. To remove the rest of its data:
+
+   ```sh
+   rm -rf ~/Library/Application\ Support/Sidekick
+   defaults delete io.damao.sidekick
+   ```
+
+## Development
+
+Building needs Xcode 16 / Swift 6 or later.
+
+### Local debugging
+
+The `.env` file in the project root uses these variable names:
 
 ```dotenv
 DEEPSEEK_API_KEY=...
 TAVILY_API_KEY=...
 ```
 
-`.env` 已被 Git 忽略，也不会进入 App Bundle。启动调试版本：
+`.env` is ignored by Git and never goes into the app bundle. Start a debug build:
 
 ```sh
 ./scripts/run_debug.sh
 ```
 
-UI 自动验收时可让调试版启动后直接展开弹窗：`Sidekick --open-on-launch`。该参数只在 Debug 构建中生效。
+For automated UI checks, a debug build can open the popover at launch: `Sidekick --open-on-launch`. The flag only works in Debug builds.
 
-也可以在 App 的设置页填写 Key；设置页中的值保存在 macOS 钥匙串，并优先于环境变量。
+Keys can also be entered in the app's settings; those are stored in the Keychain and take precedence over the environment variables.
 
-## 构建与验证
+### Build and verify
 
 ```sh
 ./scripts/build_app.sh
 ./scripts/verify.sh
 ```
 
-如需使用 `.env` 做最小真实 API 连通性测试（会消耗少量 DeepSeek tokens 和 1 次 Tavily Search credit）：
+For a minimal live API check with the keys in `.env` (it uses a few DeepSeek tokens and one Tavily search credit):
 
 ```sh
 ./scripts/smoke_api.sh
 ```
 
-修改系统提示词后，可显式运行真实模型行为评测。该命令复用 `.env` 中的 `DEEPSEEK_API_KEY`，会消耗少量 DeepSeek tokens，但使用固定搜索结果，不消耗 Tavily Search credit，也不属于默认 `verify.sh`：
+After changing the system prompt, you can run a live model evaluation. It uses `DEEPSEEK_API_KEY` from `.env` and a few DeepSeek tokens, but fixed search results, so no Tavily credit; it is not part of `verify.sh`:
 
 ```sh
 ./scripts/eval_prompt.sh
 ```
 
-生成的本地调试 App 位于 `build/Sidekick.app`。它采用本机临时签名，仅用于开发与个人调试，不应作为公开发布产物；面向用户的已签名、公证版本由 GitHub Releases 提供。
+The local debug app is built to `build/Sidekick.app`. It is signed ad hoc for development and personal debugging only and is not a release artifact; signed, notarized builds for users come from GitHub Releases.
 
-## 使用
+## License
 
-- 单击菜单栏闪光图标打开对话，或按全局快捷键 `⌥Space` 随时唤出与收起；弹窗打开时光标已在输入框，可直接输入。
-- `Esc` 收起弹窗。使用输入法时，第一次 `Esc` 先关闭候选框。
-- 可在设置页点按快捷键框后按下新的组合键来重新绑定；按 `Delete` 恢复默认。快捷键需要包含 `⌃`、`⌥` 或 `⌘` 之一，功能键可单独使用。
-- 若按下快捷键没有反应，通常是被其他 App 占用，换一个组合键即可。
-- `Return` 发送，`Shift+Return` 换行。
-- 单条用户输入最多 1000 个字符；超过上限时会保留全文供继续编辑，但不能发送。
-- 用户消息、助手回复和流式内容支持 Markdown 排版。
-- 右键菜单栏图标可打开设置或退出 App。
-- 当前会话是 30 分钟有效的临时上下文，会在下次打开弹窗或发送前惰性清空。
-- 为控制成本、延迟和隐私，较早的完整问答可能被自动移除；界面会明确提示，移除内容也会同步从临时会话文件删除。
-- 已取消、达到长度上限、被过滤或意外中断的回答仍可显示，但不会参与后续上下文；可以使用“重试”替换该次不完整回答。
-- Sidekick 不提供长期记忆、历史检索或跨会话召回。
+MIT, see [LICENSE](LICENSE).
