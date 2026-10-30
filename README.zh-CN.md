@@ -7,7 +7,7 @@
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-lightgrey)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- banner -->
+![Sidekick](docs/images/banner.jpg)
 
 Sidekick 是一个原生 macOS 菜单栏 AI 对话 App。它使用 DeepSeek V4 Flash 流式回答，并在需要最新信息时通过 Tavily 自动搜索网页。
 
